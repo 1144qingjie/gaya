@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible bug
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: What were you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include clear steps and expected vs actual result
+      placeholder: |
+        1. Go to ...
+        2. Tap ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste logs or attach screenshots if available
+  - type: input
+    id: version
+    attributes:
+      label: Affected version
+      description: e.g. v0.3.1 or commit SHA
+      placeholder: v0.0.0

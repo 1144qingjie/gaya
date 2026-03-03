@@ -1,0 +1,45 @@
+# Xcode
+.DS_Store
+.derivedData/
+*.xcuserstate
+*.xcuserdatad
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+# Swift Package Manager
+.build/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+*.podspec
+
+# Carthage
+Carthage/Build/
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Local deployment secrets
+backend/cloudbase/.env.deploy
+
+# Node.js
+node_modules/
+
+# Local temp assets
+临时文件/
+composeConversationInput(...)

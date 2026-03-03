@@ -1,0 +1,21 @@
+{
+  "name": "cloudbase",
+  "version": "1.0.0",
+  "description": "本目录是手机号登录后端实现，运行在 CloudBase 云函数。",
+  "main": "index.js",
+  "scripts": {
+    "sync:common": "bash ./scripts/sync_common_to_functions.sh",
+    "deps:functions": "bash ./scripts/install_function_deps.sh",
+    "deploy": "bash ./scripts/deploy_cloudbase.sh",
+    "init:db": "bash ./scripts/init_auth_db.sh",
+    "smoke:auth": "bash ./scripts/smoke_auth_http.sh",
+    "test": "echo \"No tests configured\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@cloudbase/cli": "^2.12.3",
+    "dotenv": "^17.3.1"
+  }
+}

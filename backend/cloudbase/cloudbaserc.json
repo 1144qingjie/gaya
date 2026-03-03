@@ -1,0 +1,90 @@
+{
+  "version": "2.0",
+  "envId": "{{env.TCB_ENV}}",
+  "functionRoot": "./functions",
+  "functions": [
+    {
+      "name": "auth_db_init",
+      "runtime": "Nodejs18.15",
+      "memorySize": 128,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}"
+      }
+    },
+    {
+      "name": "auth_onetap_login",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}",
+        "ACCESS_TOKEN_EXPIRES_IN": "{{env.ACCESS_TOKEN_EXPIRES_IN}}",
+        "REFRESH_TOKEN_EXPIRES_IN": "{{env.REFRESH_TOKEN_EXPIRES_IN}}",
+        "ALIYUN_ACCESS_KEY_ID": "{{env.ALIYUN_ACCESS_KEY_ID}}",
+        "ALIYUN_ACCESS_KEY_SECRET": "{{env.ALIYUN_ACCESS_KEY_SECRET}}",
+        "PNVS_SMS_SIGN_NAME": "{{env.PNVS_SMS_SIGN_NAME}}",
+        "PNVS_SMS_TEMPLATE_CODE": "{{env.PNVS_SMS_TEMPLATE_CODE}}"
+      }
+    },
+    {
+      "name": "auth_sms_send",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}",
+        "ACCESS_TOKEN_EXPIRES_IN": "{{env.ACCESS_TOKEN_EXPIRES_IN}}",
+        "REFRESH_TOKEN_EXPIRES_IN": "{{env.REFRESH_TOKEN_EXPIRES_IN}}",
+        "ALIYUN_ACCESS_KEY_ID": "{{env.ALIYUN_ACCESS_KEY_ID}}",
+        "ALIYUN_ACCESS_KEY_SECRET": "{{env.ALIYUN_ACCESS_KEY_SECRET}}",
+        "PNVS_SMS_SIGN_NAME": "{{env.PNVS_SMS_SIGN_NAME}}",
+        "PNVS_SMS_TEMPLATE_CODE": "{{env.PNVS_SMS_TEMPLATE_CODE}}"
+      }
+    },
+    {
+      "name": "auth_sms_verify",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}",
+        "ACCESS_TOKEN_EXPIRES_IN": "{{env.ACCESS_TOKEN_EXPIRES_IN}}",
+        "REFRESH_TOKEN_EXPIRES_IN": "{{env.REFRESH_TOKEN_EXPIRES_IN}}",
+        "ALIYUN_ACCESS_KEY_ID": "{{env.ALIYUN_ACCESS_KEY_ID}}",
+        "ALIYUN_ACCESS_KEY_SECRET": "{{env.ALIYUN_ACCESS_KEY_SECRET}}",
+        "PNVS_SMS_SIGN_NAME": "{{env.PNVS_SMS_SIGN_NAME}}",
+        "PNVS_SMS_TEMPLATE_CODE": "{{env.PNVS_SMS_TEMPLATE_CODE}}"
+      }
+    },
+    {
+      "name": "user_bootstrap",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}",
+        "ACCESS_TOKEN_EXPIRES_IN": "{{env.ACCESS_TOKEN_EXPIRES_IN}}",
+        "REFRESH_TOKEN_EXPIRES_IN": "{{env.REFRESH_TOKEN_EXPIRES_IN}}",
+        "ALIYUN_ACCESS_KEY_ID": "{{env.ALIYUN_ACCESS_KEY_ID}}",
+        "ALIYUN_ACCESS_KEY_SECRET": "{{env.ALIYUN_ACCESS_KEY_SECRET}}",
+        "PNVS_SMS_SIGN_NAME": "{{env.PNVS_SMS_SIGN_NAME}}",
+        "PNVS_SMS_TEMPLATE_CODE": "{{env.PNVS_SMS_TEMPLATE_CODE}}"
+      }
+    }
+  ]
+}

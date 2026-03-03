@@ -429,6 +429,42 @@ MemorySystemTests.shared.printMemoryStatus()
 
 ## 更新日志
 
+### v1.4.3 - 修复 iOS 兼容模式导致的页面变形
+
+**问题现象**：粒子球体被压缩变形、中心区域过度明亮，UI 布局比例异常。
+
+**根因分析**：
+
+项目的 `project.pbxproj` 在初始化时由脚本生成（UID 为顺序递增的 `A1000001...` 格式，而非 Xcode 原生随机 hex），遗漏了关键配置项 `INFOPLIST_KEY_UILaunchScreen_Generation = YES`。
+
+缺少此配置后，iOS 将 app 运行在 **320×480 兼容模式**（iPhone 4 分辨率），然后放大填充全屏。导致：
+- `UIScreen.main.bounds` 返回 320×480 而非设备真实分辨率（如 iPhone 17 的 ≈393×852）
+- Metal 渲染区域被压缩至实际屏幕的约 1/4，粒子在更小空间内叠加导致中心过亮
+- 所有 SwiftUI 布局计算基于错误的屏幕尺寸，UI 比例变形
+
+**诊断关键**：通过在 `ParticleRenderer.draw(in:)` 中添加一次性日志，捕获到：
+```
+viewport=(960.0, 1440.0) bounds=(320.0, 480.0) screen=(320.0, 480.0) native=(960.0, 1440.0) scale=3.0
+```
+`screen` 与 `native / scale` 不匹配（应为 320×480 × 3 = 960×1440 但真机屏幕并非 320×480），确认了兼容模式问题。
+
+同时 Xcode 构建时一直存在对应警告：
+```
+warning: A launch configuration or launch storyboard or xib must be provided unless the app requires full screen.
+```
+
+**修复方案**：在 `project.pbxproj` 的 Debug 和 Release buildSettings 中补齐：
+```
+INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft ...";
+```
+
+**经验总结**：
+1. 不要让 AI/脚本整体重新生成 `project.pbxproj`，应在 Xcode GUI 中操作或做精确局部修改
+2. 重大项目结构变更后必须在**真机**上全新安装验证（模拟器对 LaunchScreen 要求较松）
+3. 关注并消除所有 Xcode 构建警告，尤其涉及 `launch`、`safe area`、`interface orientation` 的
+
 ### v1.4.2 - 认证数据库自动初始化与联调脚本
 - ✅ 新增 `auth_db_init` 云函数（自动初始化 `app_users` / `phone_identities` / `auth_challenges` / `auth_rate_limits`）
 - ✅ 新增 `npm run init:db` 一键初始化数据库集合

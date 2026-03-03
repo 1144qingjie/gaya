@@ -382,92 +382,90 @@ struct ContentView: View {
     }
 
     private var canvasContent: some View {
-        ZStack {
-            Color.black
-                .ignoresSafeArea()
+        GeometryReader { canvasProxy in
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
 
-            ParticleView(
-                audioLevel: 0,
-                seedState: seedState,
-                isAISpeaking: effectiveAISpeaking,
-                aiAudioLevel: effectiveAIAudioLevel,
-                photoImage: nil,
-                photoVersion: photoVersion,
-                photoSettings: photoSettings,
-                photoInteraction: .inactive,
-                photoZoom: 1.0,
-                photoActive: false
-            )
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-
-            Color.clear
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    if keyboardBottomInset > 0 {
-                        dismissKeyboard()
-                    }
-                }
-
-            if isPhotoModalPresented, let previewImage = selectedPhotoImage {
-                PolaroidPhotoPageView(
-                    image: previewImage,
-                    captionText: isCaptionGenerating ? "" : polaroidCaption,
-                    storyText: polaroidStoryText,
-                    paperStyle: selectedPolaroidPaperStyle,
-                    inputText: $inputText,
-                    selectedPhotoItem: $selectedPhotoItem,
-                    isPhotoProcessing: isPhotoProcessing,
-                    isResponding: isResponding,
-                    onSend: {
-                        sendCurrentInput()
-                    },
-                    onInputBarTopChanged: { top in
-                        photoModalInputBarTopY = top
-                    },
-                    onClose: {
-                        var closeTransaction = Transaction()
-                        closeTransaction.disablesAnimations = true
-                        withTransaction(closeTransaction) {
-                            isPhotoModalPresented = false
-                        }
-                        captionRequestID = UUID()
-                        photoConversationRequestID = UUID()
-                        polaroidCaption = ""
-                        polaroidStoryText = ""
-                        isCaptionGenerating = false
-                        isPhotoUnderstandingPending = false
-                        isResponding = false
-                        activeResponseMode = nil
-                        textPseudoAudioLevel = 0
-                        stopPhotoStorySession()
-                        voiceService.clearPendingInjectedQueries(cancelInFlight: true)
-                        selectedPhotoImage = nil
-                        selectedPhotoItem = nil
-                    }
+                ParticleView(
+                    audioLevel: 0,
+                    seedState: seedState,
+                    isAISpeaking: effectiveAISpeaking,
+                    aiAudioLevel: effectiveAIAudioLevel,
+                    photoImage: nil,
+                    photoVersion: photoVersion,
+                    photoSettings: photoSettings,
+                    photoInteraction: .inactive,
+                    photoZoom: 1.0,
+                    photoActive: false
                 )
-                .id(photoVersion)
-                .zIndex(20)
-            }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
 
-            if shouldShowConversationBubble && !isMemoryCorridorPresented && !isPaperSelectionPresented {
-                conversationBubbleOverlay
-                    .zIndex(isPhotoModalPresented ? 25 : 12)
-            }
-
-            if !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented {
-                if seedState == .idle && errorMessage == nil && !isMoreDrawerPresented {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            handleStart()
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if keyboardBottomInset > 0 {
+                            dismissKeyboard()
                         }
+                    }
+
+                if isPhotoModalPresented, let previewImage = selectedPhotoImage {
+                    PolaroidPhotoPageView(
+                        image: previewImage,
+                        captionText: isCaptionGenerating ? "" : polaroidCaption,
+                        storyText: polaroidStoryText,
+                        paperStyle: selectedPolaroidPaperStyle,
+                        inputText: $inputText,
+                        selectedPhotoItem: $selectedPhotoItem,
+                        isPhotoProcessing: isPhotoProcessing,
+                        isResponding: isResponding,
+                        onSend: {
+                            sendCurrentInput()
+                        },
+                        onInputBarTopChanged: { top in
+                            photoModalInputBarTopY = top
+                        },
+                        onClose: {
+                            var closeTransaction = Transaction()
+                            closeTransaction.disablesAnimations = true
+                            withTransaction(closeTransaction) {
+                                isPhotoModalPresented = false
+                            }
+                            captionRequestID = UUID()
+                            photoConversationRequestID = UUID()
+                            polaroidCaption = ""
+                            polaroidStoryText = ""
+                            isCaptionGenerating = false
+                            isPhotoUnderstandingPending = false
+                            isResponding = false
+                            activeResponseMode = nil
+                            textPseudoAudioLevel = 0
+                            stopPhotoStorySession()
+                            voiceService.clearPendingInjectedQueries(cancelInFlight: true)
+                            selectedPhotoImage = nil
+                            selectedPhotoItem = nil
+                        }
+                    )
+                    .id(photoVersion)
+                    .zIndex(20)
                 }
 
-                if seedState == .idle && errorMessage == nil {
-                    VStack {
-                        Spacer()
+                if shouldShowConversationBubble && !isMemoryCorridorPresented && !isPaperSelectionPresented {
+                    conversationBubbleOverlay
+                        .zIndex(isPhotoModalPresented ? 25 : 12)
+                }
 
+                if !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented {
+                    if seedState == .idle && errorMessage == nil && !isMoreDrawerPresented {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                handleStart()
+                            }
+                    }
+
+                    if seedState == .idle && errorMessage == nil {
                         Text("它正在等待你的触摸，让它醒来")
                             .font(.system(size: 14, weight: .light))
                             .foregroundColor(.white.opacity(wakePulse ? 0.8 : 0.4))
@@ -475,108 +473,109 @@ struct ContentView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
                             .padding(.bottom, 120)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .allowsHitTesting(false)
+                            .onAppear {
+                                wakePulse = false
+                                withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                                    wakePulse = true
+                                }
+                            }
                     }
-                    .allowsHitTesting(false)
-                    .onAppear {
-                        wakePulse = false
-                        withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
-                            wakePulse = true
-                        }
+
+                    if seedState == .active {
+                        conversationModeOverlay
+                            .zIndex(27)
+
+                        bottomInputOverlay
+                            .zIndex(29)
                     }
-                }
 
-                if seedState == .active {
-                    conversationModeOverlay
-                        .zIndex(27)
+                    if isMoreDrawerPresented {
+                        Color.black.opacity(0.15)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                closeMoreDrawer()
+                            }
+                            .zIndex(28)
+                    }
 
-                    bottomInputOverlay
-                        .zIndex(29)
-                }
-
-                if isMoreDrawerPresented {
-                    Color.black.opacity(0.15)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            closeMoreDrawer()
-                        }
-                        .zIndex(28)
-                }
-
-                if seedState == .active {
-                    menuButtonOverlay
-                        .zIndex(30)
-                }
-            }
-
-            if isMemoryCorridorPresented {
-                MemoryCorridorView {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isMemoryCorridorPresented = false
+                    if seedState == .active {
+                        menuButtonOverlay
+                            .zIndex(30)
                     }
                 }
-                .zIndex(35)
-                .transition(.move(edge: .trailing))
-            }
 
-            if isPaperSelectionPresented {
-                PolaroidPaperSelectionView(
-                    currentStyle: selectedPolaroidPaperStyle,
-                    onConfirm: { selectedStyle in
-                        selectedPolaroidPaperStyleID = selectedStyle.rawValue
+                if isMemoryCorridorPresented {
+                    MemoryCorridorView {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            isPaperSelectionPresented = false
-                        }
-                    },
-                    onClose: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            isPaperSelectionPresented = false
+                            isMemoryCorridorPresented = false
                         }
                     }
-                )
-                .zIndex(35)
-                .transition(.move(edge: .trailing))
-            }
-
-            if let errorMessage = errorMessage {
-                VStack(spacing: 16) {
-                    Text("Error")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.red.opacity(0.4))
-                        .kerning(2)
-                    Text(errorMessage)
-                        .font(.system(size: 12, weight: .regular))
-                        .foregroundColor(.white.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                    Button {
-                        handleStart()
-                    } label: {
-                        Text("重试")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.8))
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 20)
-                            .background(Color.white.opacity(0.05))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
+                    .zIndex(35)
+                    .transition(.move(edge: .trailing))
                 }
-                .padding(.vertical, 20)
-                .padding(.horizontal, 16)
-                .background(Color(red: 0.18, green: 0.02, blue: 0.05).opacity(0.9))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.red.opacity(0.25), lineWidth: 1)
-                )
-                .cornerRadius(6)
+
+                if isPaperSelectionPresented {
+                    PolaroidPaperSelectionView(
+                        currentStyle: selectedPolaroidPaperStyle,
+                        onConfirm: { selectedStyle in
+                            selectedPolaroidPaperStyleID = selectedStyle.rawValue
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isPaperSelectionPresented = false
+                            }
+                        },
+                        onClose: {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isPaperSelectionPresented = false
+                            }
+                        }
+                    )
+                    .zIndex(35)
+                    .transition(.move(edge: .trailing))
+                }
+
+                if let errorMessage = errorMessage {
+                    VStack(spacing: 16) {
+                        Text("Error")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.red.opacity(0.4))
+                            .kerning(2)
+                        Text(errorMessage)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundColor(.white.opacity(0.85))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
+                        Button {
+                            handleStart()
+                        } label: {
+                            Text("重试")
+                                .font(.system(size: 10))
+                                .foregroundColor(.white.opacity(0.8))
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 20)
+                                .background(Color.white.opacity(0.05))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 16)
+                    .background(Color(red: 0.18, green: 0.02, blue: 0.05).opacity(0.9))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                    )
+                    .cornerRadius(6)
+                }
             }
+            .frame(width: canvasProxy.size.width, height: canvasProxy.size.height, alignment: .topLeading)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .coordinateSpace(name: particlePageCoordinateSpace)
     }
 
@@ -705,74 +704,62 @@ struct ContentView: View {
     }
 
     private var conversationModeOverlay: some View {
-        VStack {
-            HStack {
-                Spacer()
-                ConversationModeSwitch(mode: $conversationMode)
-                    .background(
-                        GeometryReader { proxy in
-                            let bottom = proxy.frame(in: .named(particlePageCoordinateSpace)).maxY
-                            Color.clear
-                                .onAppear {
-                                    conversationModeBottomY = bottom
-                                }
-                                .onChange(of: bottom) { _, newBottom in
-                                    conversationModeBottomY = newBottom
-                                }
-                        }
-                    )
-                Spacer()
-            }
-            .padding(.top, 16)
-            .padding(.horizontal, 70)
-
+        HStack {
+            Spacer()
+            ConversationModeSwitch(mode: $conversationMode)
+                .background(
+                    GeometryReader { proxy in
+                        let bottom = proxy.frame(in: .named(particlePageCoordinateSpace)).maxY
+                        Color.clear
+                            .onAppear {
+                                conversationModeBottomY = bottom
+                            }
+                            .onChange(of: bottom) { _, newBottom in
+                                conversationModeBottomY = newBottom
+                            }
+                    }
+                )
             Spacer()
         }
+        .padding(.top, 16)
+        .padding(.horizontal, 70)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var bottomInputOverlay: some View {
-        VStack {
-            Spacer()
-            ConversationInputBar(
-                text: $inputText,
-                selectedPhotoItem: $selectedPhotoItem,
-                isPhotoLoading: isPhotoProcessing,
-                isSendDisabled: isResponding,
-                isKeyboardActive: keyboardBottomInset > 0,
-                measurementSpace: .named(particlePageCoordinateSpace),
-                onTopChanged: { top in
-                    inputBarTopY = top
-                },
-                onSend: {
-                    sendCurrentInput()
-                }
-            )
-            .padding(.horizontal, 18)
-            .padding(.bottom, keyboardBottomInset > 0 ? (keyboardBottomInset + 5) : 10)
-        }
+        ConversationInputBar(
+            text: $inputText,
+            selectedPhotoItem: $selectedPhotoItem,
+            isPhotoLoading: isPhotoProcessing,
+            isSendDisabled: isResponding,
+            isKeyboardActive: keyboardBottomInset > 0,
+            measurementSpace: .named(particlePageCoordinateSpace),
+            onTopChanged: { top in
+                inputBarTopY = top
+            },
+            onSend: {
+                sendCurrentInput()
+            }
+        )
+        .padding(.horizontal, 18)
+        .padding(.bottom, keyboardBottomInset > 0 ? (keyboardBottomInset + 5) : 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 
     private var menuButtonOverlay: some View {
-        VStack {
-            HStack {
-                Button {
-                    toggleMoreDrawer()
-                } label: {
-                    LiquidGlassMenuCircleIcon(
-                        size: 42,
-                        isActive: isMoreDrawerPresented
-                    )
-                }
-                .buttonStyle(LiquidGlassCircleButtonStyle(pressedScale: 0.95))
-                .accessibilityLabel("更多")
-
-                Spacer()
-            }
-            .padding(.leading, 20)
-            .padding(.top, 16)
-
-            Spacer()
+        Button {
+            toggleMoreDrawer()
+        } label: {
+            LiquidGlassMenuCircleIcon(
+                size: 42,
+                isActive: isMoreDrawerPresented
+            )
         }
+        .buttonStyle(LiquidGlassCircleButtonStyle(pressedScale: 0.95))
+        .accessibilityLabel("更多")
+        .padding(.leading, 20)
+        .padding(.top, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     // MARK: - Actions

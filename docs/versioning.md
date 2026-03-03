@@ -41,3 +41,34 @@ feat(auth): add SMS verification cooldown
    git push origin main --tags
    ```
 3. GitHub Action `Release On Tag` creates a Release with auto-generated notes.
+
+## Smart snapshot (recommended)
+Use the helper script for large changes. It will:
+- Stage all current changes.
+- Detect change size and auto-choose `major` / `minor` / `patch`.
+- Commit once and create an annotated `vX.Y.Z` tag.
+
+Command:
+```bash
+./scripts/smart_version.sh --auto --push
+```
+
+Common variants:
+```bash
+# Force a bump type
+./scripts/smart_version.sh --minor --push
+
+# Add custom commit message
+./scripts/smart_version.sh --auto -m "feat: refactor photo interaction pipeline" --push
+```
+
+Auto bump thresholds:
+- `major`: >= 1000 changed lines or >= 25 files.
+- `minor`: >= 300 changed lines or >= 8 files.
+- `patch`: other smaller changes.
+
+Rollback:
+```bash
+git checkout vX.Y.Z
+git revert --no-edit vX.Y.Z..HEAD
+```

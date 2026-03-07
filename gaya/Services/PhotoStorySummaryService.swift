@@ -53,8 +53,12 @@ final class PhotoStorySummaryService {
         guard let response = await DeepSeekOrchestrator.shared.callDoubaoAPI(
             messages: [message],
             temperature: 0.2,
-            maxOutputTokens: 220
+            maxOutputTokens: 220,
+            feature: .photoStorySummary
         ) else {
+            if await shouldKeepPreviousSummaryOnMembershipFailure() {
+                return previous
+            }
             return fallbackSummary(from: clippedTurns)
         }
 
@@ -131,5 +135,11 @@ final class PhotoStorySummaryService {
         }
 
         return String(normalized.prefix(maxSummaryCharacters))
+    }
+
+    private func shouldKeepPreviousSummaryOnMembershipFailure() async -> Bool {
+        await MainActor.run {
+            MembershipStore.shared.blockingMessage != nil
+        }
     }
 }

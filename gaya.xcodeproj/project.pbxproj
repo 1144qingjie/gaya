@@ -20,12 +20,17 @@
 		6C2CE58072004108BEA2C194 /* PhotoControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 524C6181D775448B8A1257A4 /* PhotoControlPanel.swift */; };
 		81E2468478E4456DA9073EB9 /* PolaroidPrintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16666C8E6E12417398A9FFEA /* PolaroidPrintView.swift */; };
 		85A4A5FEAD5F44AE87EB248A /* PhotoParticleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CD5BDC405F149B7B68EADBB /* PhotoParticleTests.swift */; };
+		8A7D10000000000000000001 /* MembershipService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A7D10000000000000000002 /* MembershipService.swift */; };
 		9C3BBD1DFB66B94022199E8D /* Pods_gaya.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BD2FA9CA81BE5804EF5EDA7B /* Pods_gaya.framework */; };
+		AUTH0001FD00000000000001 /* ATAuthSDK.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AUTH0002FD00000000000001 /* ATAuthSDK.xcframework */; };
+		AUTH0004FD00000000000001 /* YTXMonitor.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AUTH0005FD00000000000001 /* YTXMonitor.xcframework */; };
+		AUTH0006FD00000000000001 /* YTXOperators.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AUTH0007FD00000000000001 /* YTXOperators.xcframework */; };
 		A1000001000000000000001 /* gayaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000001 /* gayaApp.swift */; };
 		A1000003000000000000001 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000004000000000000001 /* ContentView.swift */; };
 		A1000005000000000000001 /* ParticleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000006000000000000001 /* ParticleView.swift */; };
 		A1000007000000000000001 /* ParticleRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000008000000000000001 /* ParticleRenderer.swift */; };
 		A1000009000000000000001 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = A1000010000000000000001 /* Shaders.metal */; };
+		AST000002000000000000001 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AST000001000000000000001 /* Assets.xcassets */; };
 		C1A000020000000000000001 /* VoiceInputControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1A000010000000000000001 /* VoiceInputControl.swift */; };
 		DA90547DA0EE45D2B3C9335D /* PhotoInteractionLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4C3FC3B5CB144B09ACDC398 /* PhotoInteractionLayer.swift */; };
 		F09ADFEB0021483FB23E22C0 /* PhotoParticleSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA6E5310CDA543B9AE47F3BD /* PhotoParticleSettings.swift */; };
@@ -33,6 +38,7 @@
 		F0C100000000000000000004 /* MaShanZheng-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F0C100000000000000000003 /* MaShanZheng-Regular.ttf */; };
 		F0C100000000000000000009 /* Record_2026-02-18-13-42-20_a2db1b9502c98f25523e43284b79cce6_polaroid_clean_5to11_fxonly.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = F0C100000000000000000008 /* Record_2026-02-18-13-42-20_a2db1b9502c98f25523e43284b79cce6_polaroid_clean_5to11_fxonly.mp3 */; };
 		F0C10000000000000000000C /* PhotoStorySummaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C10000000000000000000B /* PhotoStorySummaryService.swift */; };
+		SEC000002000000000000001 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEC000001000000000000001 /* Secrets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,12 +56,14 @@
 		66CBB01D2F2CF58D00910523 /* LocalEmbedding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalEmbedding.swift; sourceTree = "<group>"; };
 		66CBB01F2F2CF58D00910523 /* VectorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorStore.swift; sourceTree = "<group>"; };
 		66CBB0212F2CF58D00910523 /* VolcWebSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolcWebSearchService.swift; sourceTree = "<group>"; };
+		8A7D10000000000000000002 /* MembershipService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembershipService.swift; sourceTree = "<group>"; };
 		A1000000000000000000001 /* gaya.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = gaya.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000002000000000000001 /* gayaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = gayaApp.swift; sourceTree = "<group>"; };
 		A1000004000000000000001 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A1000006000000000000001 /* ParticleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticleView.swift; sourceTree = "<group>"; };
 		A1000008000000000000001 /* ParticleRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticleRenderer.swift; sourceTree = "<group>"; };
 		A1000010000000000000001 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
+		AST000001000000000000001 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B110172C226A5F345CD96C31 /* Pods-gaya.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-gaya.release.xcconfig"; path = "Target Support Files/Pods-gaya/Pods-gaya.release.xcconfig"; sourceTree = "<group>"; };
 		B4C3FC3B5CB144B09ACDC398 /* PhotoInteractionLayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoInteractionLayer.swift; sourceTree = "<group>"; };
 		BD2FA9CA81BE5804EF5EDA7B /* Pods_gaya.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_gaya.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -66,6 +74,10 @@
 		F0C100000000000000000006 /* MaShanZheng-OFL.txt */ = {isa = PBXFileReference; lastKnownFileType = text.plain; path = "MaShanZheng-OFL.txt"; sourceTree = "<group>"; };
 		F0C100000000000000000008 /* Record_2026-02-18-13-42-20_a2db1b9502c98f25523e43284b79cce6_polaroid_clean_5to11_fxonly.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "Record_2026-02-18-13-42-20_a2db1b9502c98f25523e43284b79cce6_polaroid_clean_5to11_fxonly.mp3"; sourceTree = "<group>"; };
 		F0C10000000000000000000B /* PhotoStorySummaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoStorySummaryService.swift; sourceTree = "<group>"; };
+		SEC000001000000000000001 /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
+		AUTH0002FD00000000000001 /* ATAuthSDK.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "numberAuthSDK_APP_iOS_v2.14.14_operator_ui_log_static/SDK/xcframeworks/ATAuthSDK.xcframework"; sourceTree = SOURCE_ROOT; };
+		AUTH0005FD00000000000001 /* YTXMonitor.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "numberAuthSDK_APP_iOS_v2.14.14_operator_ui_log_static/SDK/xcframeworks/YTXMonitor.xcframework"; sourceTree = SOURCE_ROOT; };
+		AUTH0007FD00000000000001 /* YTXOperators.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "numberAuthSDK_APP_iOS_v2.14.14_operator_ui_log_static/SDK/xcframeworks/YTXOperators.xcframework"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +86,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				9C3BBD1DFB66B94022199E8D /* Pods_gaya.framework in Frameworks */,
+				AUTH0001FD00000000000001 /* ATAuthSDK.xcframework in Frameworks */,
+				AUTH0004FD00000000000001 /* YTXMonitor.xcframework in Frameworks */,
+				AUTH0006FD00000000000001 /* YTXOperators.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -83,6 +98,9 @@
 		558C3D2BA8762967A5CAA9EB /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				AUTH0002FD00000000000001 /* ATAuthSDK.xcframework */,
+				AUTH0005FD00000000000001 /* YTXMonitor.xcframework */,
+				AUTH0007FD00000000000001 /* YTXOperators.xcframework */,
 				BD2FA9CA81BE5804EF5EDA7B /* Pods_gaya.framework */,
 			);
 			name = Frameworks;
@@ -95,6 +113,7 @@
 				66CBB00E2F2CF58D00910523 /* VolcEngineConfig.swift */,
 				66CBB0132F2CF58D00910523 /* MemoryStore.swift */,
 				66CBB0152F2CF58D00910523 /* DeepSeekOrchestrator.swift */,
+				8A7D10000000000000000002 /* MembershipService.swift */,
 				F0C100000000000000000001 /* PhotoEmotionCaptionService.swift */,
 				F0C10000000000000000000B /* PhotoStorySummaryService.swift */,
 				66CBB01D2F2CF58D00910523 /* LocalEmbedding.swift */,
@@ -144,6 +163,8 @@
 		A1000015000000000000001 /* gaya */ = {
 			isa = PBXGroup;
 			children = (
+				SEC000001000000000000001 /* Secrets.swift */,
+				AST000001000000000000001 /* Assets.xcassets */,
 				66CBB00F2F2CF58D00910523 /* Services */,
 				66CBB0182F2CF58D00910523 /* Models */,
 				F0C100000000000000000007 /* Resources */,
@@ -224,7 +245,7 @@
 				A1000021000000000000001 /* Sources */,
 				A1000013000000000000001 /* Frameworks */,
 				A1000022000000000000001 /* Resources */,
-				DAA7944509CDC9D73785CCF7 /* [CP] Copy Pods Resources */,
+				AUTH0008FD00000000000001 /* Copy ATAuthSDK.bundle */,
 			);
 			buildRules = (
 			);
@@ -273,6 +294,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AST000002000000000000001 /* Assets.xcassets in Resources */,
 				F0C100000000000000000004 /* MaShanZheng-Regular.ttf in Resources */,
 				F0C100000000000000000009 /* Record_2026-02-18-13-42-20_a2db1b9502c98f25523e43284b79cce6_polaroid_clean_5to11_fxonly.mp3 in Resources */,
 			);
@@ -303,21 +325,23 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		DAA7944509CDC9D73785CCF7 /* [CP] Copy Pods Resources */ = {
+		AUTH0008FD00000000000001 /* Copy ATAuthSDK.bundle */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-gaya/Pods-gaya-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			name = "[CP] Copy Pods Resources";
+			inputPaths = (
+			);
+			name = "Copy ATAuthSDK.bundle";
 			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-gaya/Pods-gaya-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-gaya/Pods-gaya-resources.sh\"\n";
+			shellScript = "XCF=\"${SRCROOT}/numberAuthSDK_APP_iOS_v2.14.14_operator_ui_log_static/SDK/xcframeworks/ATAuthSDK.xcframework\"\nif [ \"${PLATFORM_NAME}\" = \"iphoneos\" ]; then\n  BUNDLE_SRC=\"${XCF}/ios-arm64/ATAuthSDK.framework/ATAuthSDK.bundle\"\nelse\n  BUNDLE_SRC=\"${XCF}/ios-arm64_x86_64-simulator/ATAuthSDK.framework/ATAuthSDK.bundle\"\nfi\nDST=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ATAuthSDK.bundle\"\nif [ -d \"${BUNDLE_SRC}\" ]; then\n  rm -rf \"${DST}\"\n  cp -R \"${BUNDLE_SRC}\" \"${DST}\"\n  echo \"Copied ATAuthSDK.bundle to app resources\"\nelse\n  echo \"warning: ATAuthSDK.bundle not found at ${BUNDLE_SRC}\"\nfi\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -338,6 +362,7 @@
 				66CBB0112F2CF58D00910523 /* VoiceService.swift in Sources */,
 				66CBB0122F2CF58D00910523 /* MemoryStore.swift in Sources */,
 				66CBB0142F2CF58D00910523 /* DeepSeekOrchestrator.swift in Sources */,
+				8A7D10000000000000000001 /* MembershipService.swift in Sources */,
 				F0C100000000000000000002 /* PhotoEmotionCaptionService.swift in Sources */,
 				F0C10000000000000000000C /* PhotoStorySummaryService.swift in Sources */,
 				66CBB0162F2CF58D00910523 /* MemoryModels.swift in Sources */,
@@ -350,6 +375,7 @@
 				F09ADFEB0021483FB23E22C0 /* PhotoParticleSettings.swift in Sources */,
 				A1000009000000000000001 /* Shaders.metal in Sources */,
 				A1000001000000000000001 /* gayaApp.swift in Sources */,
+				SEC000002000000000000001 /* Secrets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -486,6 +512,10 @@
 				DEVELOPMENT_TEAM = GQ737WB429;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(PODS_CONFIGURATION_BUILD_DIR)/ATAuthSDK\"",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -495,6 +525,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "-144022020.gaya";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -514,6 +548,10 @@
 				DEVELOPMENT_TEAM = GQ737WB429;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(PODS_CONFIGURATION_BUILD_DIR)/ATAuthSDK\"",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -523,6 +561,10 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = "-144022020.gaya";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

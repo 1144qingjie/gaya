@@ -42,9 +42,10 @@ async function getMobileByOneTapToken(token) {
     throw new Error(response?.Message || "GetMobile failed");
   }
 
-  const phone = response?.PhoneNumber;
+  const phone =
+    response?.GetMobileResultDTO?.Mobile || response?.PhoneNumber;
   if (!phone) {
-    throw new Error("GetMobile missing phone number");
+    throw new Error("GetMobile missing phone number in response: " + JSON.stringify(response));
   }
 
   return {

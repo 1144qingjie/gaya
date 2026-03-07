@@ -85,6 +85,102 @@
         "PNVS_SMS_SIGN_NAME": "{{env.PNVS_SMS_SIGN_NAME}}",
         "PNVS_SMS_TEMPLATE_CODE": "{{env.PNVS_SMS_TEMPLATE_CODE}}"
       }
+    },
+    {
+      "name": "membership_profile_get",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_products_list",
+      "runtime": "Nodejs18.15",
+      "memorySize": 128,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_purchase_sync",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_restore_sync",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_hold_create",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_hold_commit",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_hold_release",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
+    },
+    {
+      "name": "membership_ledger_list",
+      "runtime": "Nodejs18.15",
+      "memorySize": 256,
+      "timeout": 10,
+      "handler": "index.main",
+      "installDependency": true,
+      "envVariables": {
+        "TCB_ENV": "{{env.TCB_ENV}}",
+        "APP_JWT_SECRET": "{{env.APP_JWT_SECRET}}"
+      }
     }
   ]
 }

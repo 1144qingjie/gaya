@@ -36,6 +36,22 @@ run_tcb() {
   npx tcb "$@"
 }
 
+FUNCTIONS=(
+  auth_db_init
+  auth_onetap_login
+  auth_sms_send
+  auth_sms_verify
+  user_bootstrap
+  membership_profile_get
+  membership_products_list
+  membership_purchase_sync
+  membership_restore_sync
+  membership_hold_create
+  membership_hold_commit
+  membership_hold_release
+  membership_ledger_list
+)
+
 route_points_to_target() {
   local service_path="$1"
   local function_name="$2"
@@ -55,8 +71,13 @@ bash "${ROOT_DIR}/scripts/sync_common_to_functions.sh"
 echo "Logging into Tencent Cloud..."
 run_tcb login -k --apiKeyId "${TENCENTCLOUD_SECRETID}" --apiKey "${TENCENTCLOUD_SECRETKEY}"
 
-echo "Deploying all functions with cloudbaserc.json ..."
-run_tcb fn deploy --all -e "${TCB_ENV}" --force
+echo "Deploying functions sequentially to avoid CloudBase queue mis-packaging ..."
+for fn in "${FUNCTIONS[@]}"; do
+  echo "Deploying function: ${fn}"
+  run_tcb fn deploy "${fn}" -e "${TCB_ENV}" --force
+  echo "Updating function config: ${fn}"
+  run_tcb fn config update "${fn}" -e "${TCB_ENV}"
+done
 
 upsert_service_route() {
   local raw_path="$1"
@@ -106,6 +127,14 @@ upsert_service_route "/auth/onetap/login" "auth_onetap_login"
 upsert_service_route "/auth/sms/send" "auth_sms_send"
 upsert_service_route "/auth/sms/verify" "auth_sms_verify"
 upsert_service_route "/user/bootstrap" "user_bootstrap"
+upsert_service_route "/membership/profile" "membership_profile_get"
+upsert_service_route "/membership/products" "membership_products_list"
+upsert_service_route "/membership/purchase/sync" "membership_purchase_sync"
+upsert_service_route "/membership/restore/sync" "membership_restore_sync"
+upsert_service_route "/membership/hold/create" "membership_hold_create"
+upsert_service_route "/membership/hold/commit" "membership_hold_commit"
+upsert_service_route "/membership/hold/release" "membership_hold_release"
+upsert_service_route "/membership/ledger/list" "membership_ledger_list"
 
 echo "Current HTTP service routes:"
 run_tcb service list -e "${TCB_ENV}" || true

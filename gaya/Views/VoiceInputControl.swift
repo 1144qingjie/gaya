@@ -226,12 +226,17 @@ private struct VoiceInputHint: View {
 
 struct ConversationModeSwitch: View {
     @Binding var mode: ConversationMode
+    var onLoginRequired: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(ConversationMode.allCases) { item in
                 Button {
                     guard mode != item else { return }
+                    if let gate = onLoginRequired {
+                        gate()
+                        return
+                    }
                     mode = item
                     triggerModeSwitchHaptic()
                 } label: {
@@ -277,6 +282,7 @@ struct ConversationInputBar: View {
     var isKeyboardActive: Bool = false
     var measurementSpace: CoordinateSpace = .global
     var onTopChanged: ((CGFloat) -> Void)? = nil
+    var onLoginRequired: (() -> Void)?
     var onSend: () -> Void
     private let capsuleHeight: CGFloat = 42
 
@@ -299,22 +305,39 @@ struct ConversationInputBar: View {
     var body: some View {
         HStack(spacing: hasText ? 0 : 8) {
             if !hasText {
-                PhotosPicker(
-                    selection: $selectedPhotoItem,
-                    matching: .images,
-                    photoLibrary: .shared()
-                ) {
-                    LiquidGlassCircleIcon(
-                        systemName: "photo.badge.plus",
-                        size: 42,
-                        iconSize: 16,
-                        isLoading: isPhotoLoading,
-                        isActive: true
-                    )
+                if let gate = onLoginRequired {
+                    Button {
+                        gate()
+                    } label: {
+                        LiquidGlassCircleIcon(
+                            systemName: "photo.badge.plus",
+                            size: 42,
+                            iconSize: 16,
+                            isLoading: isPhotoLoading,
+                            isActive: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("选择照片")
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                } else {
+                    PhotosPicker(
+                        selection: $selectedPhotoItem,
+                        matching: .images,
+                        photoLibrary: .shared()
+                    ) {
+                        LiquidGlassCircleIcon(
+                            systemName: "photo.badge.plus",
+                            size: 42,
+                            iconSize: 16,
+                            isLoading: isPhotoLoading,
+                            isActive: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("选择照片")
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("选择照片")
-                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
 
             HStack(spacing: 8) {
@@ -322,7 +345,9 @@ struct ConversationInputBar: View {
                     text: $text,
                     placeholder: "发消息"
                 ) {
-                    if canSend {
+                    if let gate = onLoginRequired {
+                        gate()
+                    } else if canSend {
                         onSend()
                     }
                 }
@@ -330,7 +355,9 @@ struct ConversationInputBar: View {
                 .frame(height: 22)
 
                 Button {
-                    if canSend {
+                    if let gate = onLoginRequired {
+                        gate()
+                    } else if canSend {
                         onSend()
                     }
                 } label: {
@@ -339,7 +366,7 @@ struct ConversationInputBar: View {
                         .foregroundColor(canSend ? .white.opacity(0.92) : .white.opacity(0.35))
                 }
                 .buttonStyle(.plain)
-                .disabled(!canSend)
+                .disabled(onLoginRequired == nil && !canSend)
             }
             .padding(.leading, 12)
             .padding(.trailing, 9)

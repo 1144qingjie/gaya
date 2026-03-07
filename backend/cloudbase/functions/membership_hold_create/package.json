@@ -1,0 +1,10 @@
+{
+  "name": "gaya-cloud-functions",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@alicloud/pop-core": "^1.8.0",
+    "@cloudbase/node-sdk": "^2.10.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

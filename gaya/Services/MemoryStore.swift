@@ -30,7 +30,7 @@ class MemoryStore {
     
     // MARK: - 持久化
     private var storageURL: URL
-    private var currentNamespace: String = "guest"
+    private var currentNamespace: String = "local"
     private let saveQueue = DispatchQueue(label: "com.gaya.memoryStore.save")
     private var isDirty = false  // 标记是否需要保存
     
@@ -64,7 +64,7 @@ class MemoryStore {
             with: "_",
             options: .regularExpression
         )
-        return filtered.isEmpty ? "guest" : filtered
+        return filtered.isEmpty ? "local" : filtered
     }
     
     // MARK: - 公开接口
@@ -170,7 +170,7 @@ class MemoryStore {
         print("👤 User profile updated")
     }
 
-    /// 切换记忆命名空间（游客/用户）
+    /// 切换记忆命名空间（本地/用户）
     func switchNamespace(_ namespace: String) {
         let normalized = Self.sanitizeNamespace(namespace)
         guard normalized != currentNamespace else { return }
@@ -932,9 +932,17 @@ final class MemoryCorridorSummaryService {
         if let response = await DeepSeekOrchestrator.shared.callDoubaoAPI(
             messages: [message],
             temperature: 0.25,
-            maxOutputTokens: 900
+            maxOutputTokens: 900,
+            feature: .memoryCorridorSummary
         ), let parsed = parseSummaryResponse(response, turns: clippedTurns) {
             return parsed
+        }
+
+        if await shouldShowRechargePlaceholder() {
+            return MemoryCorridorSummaryResult(
+                title: "待补写",
+                content: "今日对话已记录。当前积分不足，记忆回廊日记会在你恢复可用积分后继续生成。"
+            )
         }
 
         return fallbackSummary(from: clippedTurns)
@@ -1491,6 +1499,12 @@ final class MemoryCorridorSummaryService {
 
         return String("今天的心事".prefix(maxTitleCharacters))
     }
+
+    private func shouldShowRechargePlaceholder() async -> Bool {
+        await MainActor.run {
+            MembershipStore.shared.blockingMessage != nil
+        }
+    }
 }
 
 // MARK: - 记忆回廊存储与调度
@@ -1508,7 +1522,7 @@ final class MemoryCorridorStore: ObservableObject {
     }
 
     private var storageURL: URL
-    private var currentNamespace: String = "guest"
+    private var currentNamespace: String = "local"
     private var calendar: Calendar
     private let dateFormatter: DateFormatter
     private var dailyFinalizeTimer: Timer?
@@ -1547,7 +1561,7 @@ final class MemoryCorridorStore: ObservableObject {
             with: "_",
             options: .regularExpression
         )
-        return filtered.isEmpty ? "guest" : filtered
+        return filtered.isEmpty ? "local" : filtered
     }
 
     private static func makeStorageURL(namespace: String) -> URL {

@@ -1,8 +1,21 @@
 import SwiftUI
+#if canImport(ATAuthSDK)
+import ATAuthSDK
+#endif
 
 @main
 struct gayaApp: App {
     @Environment(\.scenePhase) private var scenePhase
+    
+    init() {
+        #if canImport(ATAuthSDK)
+        TXCommonHandler.sharedInstance().setAuthSDKInfo(Secrets.pnvsAuthSecret) { result in
+            let code = result["resultCode"] as? String ?? ""
+            let msg = result["msg"] as? String ?? ""
+            print("🔐 ATAuthSDK init: code=\(code) msg=\(msg)")
+        }
+        #endif
+    }
     
     var body: some Scene {
         WindowGroup {
@@ -24,6 +37,8 @@ struct gayaApp: App {
             case .active:
                 print("📱 App became active")
                 Task { @MainActor in
+                    MembershipStore.shared.prepareForAppLaunch()
+                    await MembershipStore.shared.handleAppDidBecomeActive()
                     await MemoryCorridorStore.shared.handleAppDidBecomeActive()
                 }
             @unknown default:

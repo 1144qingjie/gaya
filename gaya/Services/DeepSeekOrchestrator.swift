@@ -8,6 +8,11 @@
 
 import Foundation
 
+struct ArkTextResponse {
+    let text: String
+    let totalTokens: Int
+}
+
 /// Ark Responses API 输入内容（支持多模态）
 enum ArkInputContent {
     case inputText(String)
@@ -90,7 +95,7 @@ class DeepSeekOrchestrator {
         // 优先级：环境变量 > Info.plist > 内置默认值
         apiKey = env["ARK_API_KEY"] ??
                  (info?["ARK_API_KEY"] as? String) ??
-                 "93194c61-c2b4-4887-878a-884e84423c5f"
+                 Secrets.arkApiKey
         baseURL = env["ARK_BASE_URL"] ??
                   (info?["ARK_BASE_URL"] as? String) ??
                   "https://ark.cn-beijing.volces.com/api/v3/responses"
@@ -221,7 +226,10 @@ class DeepSeekOrchestrator {
         请直接输出JSON，不要有其他内容：
         """
         
-        guard let response = await callDeepSeek(prompt: prompt) else {
+        guard let response = await callDoubaoTextAPI(
+            prompt: prompt,
+            feature: .memoryRetrieval
+        ) else {
             print("❌ Retrieval model call failed")
             return .empty
         }
@@ -390,7 +398,10 @@ class DeepSeekOrchestrator {
         请直接输出JSON，不要其他文字：
         """
         
-        guard let response = await callDeepSeek(prompt: prompt) else {
+        guard let response = await callDoubaoTextAPI(
+            prompt: prompt,
+            feature: .memoryProfileExtraction
+        ) else {
             return
         }
         
@@ -740,7 +751,10 @@ class DeepSeekOrchestrator {
         请只输出一个情感词：
         """
         
-        guard let response = await callDeepSeek(prompt: prompt) else {
+        guard let response = await callDoubaoTextAPI(
+            prompt: prompt,
+            feature: .memoryEmotionAnalysis
+        ) else {
             return nil
         }
         
@@ -750,15 +764,31 @@ class DeepSeekOrchestrator {
     
     /// 公开的 API 调用方法（供其他模块使用，向后兼容旧命名）
     func callDeepSeekAPI(prompt: String) async -> String? {
-        return await callDeepSeek(prompt: prompt)
+        return await callDoubaoTextAPI(prompt: prompt)
     }
     
     /// 新接口：调用 Doubao 文本能力（Ark Responses API）
     func callDoubaoTextAPI(
         prompt: String,
         temperature: Double? = nil,
-        maxOutputTokens: Int? = nil
+        maxOutputTokens: Int? = nil,
+        feature: MembershipFeatureKey? = nil
     ) async -> String? {
+        let result = await callDoubaoTextResult(
+            prompt: prompt,
+            temperature: temperature,
+            maxOutputTokens: maxOutputTokens,
+            feature: feature
+        )
+        return result?.text
+    }
+
+    func callDoubaoTextResult(
+        prompt: String,
+        temperature: Double? = nil,
+        maxOutputTokens: Int? = nil,
+        feature: MembershipFeatureKey? = nil
+    ) async -> ArkTextResponse? {
         let message = ArkInputMessage(
             role: "user",
             content: [.inputText(prompt)]
@@ -770,7 +800,8 @@ class DeepSeekOrchestrator {
         return await callArkResponses(
             messages: [message],
             temperature: resolvedTemperature,
-            maxOutputTokens: resolvedMaxOutputTokens
+            maxOutputTokens: resolvedMaxOutputTokens,
+            feature: feature
         )
     }
     
@@ -778,37 +809,75 @@ class DeepSeekOrchestrator {
     func callDoubaoAPI(
         messages: [ArkInputMessage],
         temperature: Double? = nil,
-        maxOutputTokens: Int? = nil
+        maxOutputTokens: Int? = nil,
+        feature: MembershipFeatureKey? = nil
     ) async -> String? {
+        let result = await callDoubaoAPIResult(
+            messages: messages,
+            temperature: temperature,
+            maxOutputTokens: maxOutputTokens,
+            feature: feature
+        )
+        return result?.text
+    }
+
+    func callDoubaoAPIResult(
+        messages: [ArkInputMessage],
+        temperature: Double? = nil,
+        maxOutputTokens: Int? = nil,
+        feature: MembershipFeatureKey? = nil
+    ) async -> ArkTextResponse? {
         return await callArkResponses(
             messages: messages,
             temperature: temperature,
-            maxOutputTokens: maxOutputTokens
+            maxOutputTokens: maxOutputTokens,
+            feature: feature
         )
     }
-    
-    /// 兼容旧内部命名，统一走 Ark Responses API
-    private func callDeepSeek(prompt: String) async -> String? {
-        return await callDoubaoTextAPI(prompt: prompt)
-    }
-    
+
     /// 调用 Ark Responses API（统一底层）
     private func callArkResponses(
         messages: [ArkInputMessage],
         temperature: Double?,
-        maxOutputTokens: Int?
-    ) async -> String? {
+        maxOutputTokens: Int?,
+        feature: MembershipFeatureKey? = nil
+    ) async -> ArkTextResponse? {
         guard let url = URL(string: baseURL) else {
             print("❌ Invalid Ark URL")
             return nil
         }
-        
+
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             print("❌ Empty Ark API key")
             return nil
         }
-        
+
         var currentMaxOutputTokens = maxOutputTokens
+        let hold: MembershipHoldReceipt?
+        if let feature {
+            do {
+                hold = try await MembershipBillingCoordinator.shared.createHold(
+                    feature: feature,
+                    payload: [
+                        "model": model,
+                        "gateway": "ark"
+                    ]
+                )
+            } catch {
+                await MainActor.run {
+                    MembershipStore.shared.blockingMessage = error.localizedDescription
+                }
+                print("❌ Membership hold create failed for \(feature.rawValue): \(error.localizedDescription)")
+                return nil
+            }
+        } else {
+            hold = nil
+        }
+
+        func releaseHoldIfNeeded(reason: String) async {
+            guard let hold else { return }
+            await MembershipBillingCoordinator.shared.releaseHold(hold, reason: reason)
+        }
 
         for attempt in 1...maxRetryAttempts {
             var body: [String: Any] = [
@@ -825,6 +894,7 @@ class DeepSeekOrchestrator {
 
             guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else {
                 print("❌ Failed to serialize Ark request")
+                await releaseHoldIfNeeded(reason: "serialize_failed")
                 return nil
             }
 
@@ -846,6 +916,7 @@ class DeepSeekOrchestrator {
                         continue
                     }
                     print("❌ Invalid response type")
+                    await releaseHoldIfNeeded(reason: "invalid_response")
                     return nil
                 }
 
@@ -865,17 +936,32 @@ class DeepSeekOrchestrator {
                     if let errorText = String(data: data, encoding: .utf8) {
                         print("   Error: \(errorText)")
                     }
+                    await releaseHoldIfNeeded(reason: "http_error")
                     return nil
                 }
 
                 let extraction = extractTextAndUsage(from: data)
-
                 if let totalTokens = extraction.totalTokens {
                     print("📊 Doubao usage: \(totalTokens) tokens")
                 }
 
                 if let text = extraction.text, !text.isEmpty {
-                    return text
+                    let settledTokens = extraction.totalTokens ?? estimateTotalTokens(
+                        messages: messages,
+                        responseText: text,
+                        maxOutputTokens: currentMaxOutputTokens
+                    )
+                    if let hold {
+                        await MembershipBillingCoordinator.shared.commitHold(
+                            hold,
+                            usage: MembershipOperationUsage(totalTokens: settledTokens, billableSeconds: nil),
+                            payload: [
+                                "model": model,
+                                "feature": feature?.rawValue ?? ""
+                            ]
+                        )
+                    }
+                    return ArkTextResponse(text: text, totalTokens: settledTokens)
                 }
 
                 let incompleteReason = extractIncompleteReason(from: data)
@@ -892,8 +978,8 @@ class DeepSeekOrchestrator {
                 if let raw = String(data: data, encoding: .utf8) {
                     print("⚠️ Ark response contains no text payload: \(raw)")
                 }
+                await releaseHoldIfNeeded(reason: "empty_response")
                 return nil
-
             } catch {
                 if shouldRetry(networkError: error), attempt < maxRetryAttempts {
                     let delay = retryDelaySeconds(forAttempt: attempt, retryAfter: nil)
@@ -903,11 +989,36 @@ class DeepSeekOrchestrator {
                 }
 
                 print("❌ Ark API call failed: \(error)")
+                await releaseHoldIfNeeded(reason: "network_error")
                 return nil
             }
         }
 
+        await releaseHoldIfNeeded(reason: "retry_exhausted")
         return nil
+    }
+
+    private func estimateTotalTokens(
+        messages: [ArkInputMessage],
+        responseText: String,
+        maxOutputTokens: Int?
+    ) -> Int {
+        let inputChars = messages.reduce(0) { partialResult, message in
+            partialResult + message.content.reduce(0) { partial, content in
+                switch content {
+                case .inputText(let text):
+                    return partial + text.count
+                case .inputImage(let url), .inputVideo(let url):
+                    return partial + min(url.count / 12, 240)
+                case .custom(_, let payload):
+                    return partial + payload.description.count / 4
+                }
+            }
+        }
+
+        let estimatedInputTokens = max(1, Int(Double(inputChars) * 0.8))
+        let estimatedOutputTokens = max(responseText.count, maxOutputTokens.map { min($0, max(responseText.count, 1) * 2) } ?? responseText.count)
+        return estimatedInputTokens + estimatedOutputTokens
     }
 
     private func shouldRetry(statusCode: Int) -> Bool {
@@ -1252,7 +1363,10 @@ extension DeepSeekOrchestrator {
         如果都不相关，输出：[]
         """
         
-        guard let response = await callDeepSeek(prompt: prompt) else {
+        guard let response = await callDoubaoTextAPI(
+            prompt: prompt,
+            feature: .memoryRetrieval
+        ) else {
             return nil
         }
         

@@ -2,7 +2,7 @@ platform :ios, '17.0'
 use_frameworks!
 
 target 'gaya' do
-  pod 'ATAuthSDK', '1.0.1'
+  pod 'ATAuthSDK', :path => 'Frameworks'
 end
 
 post_install do |installer|

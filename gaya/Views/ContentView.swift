@@ -45,7 +45,7 @@ private final class TextConversationService {
         userText: String,
         history: [TextConversationContextTurn],
         fallbackOverride: String? = nil
-    ) async -> String {
+    ) async -> String? {
         let prompt = buildPrompt(userText: userText, history: history)
         if let primary = await requestReply(prompt: prompt, maxOutputTokens: primaryMaxOutputTokens) {
             return primary
@@ -57,6 +57,13 @@ private final class TextConversationService {
         )
         if let retry = await requestReply(prompt: retryPrompt, maxOutputTokens: retryMaxOutputTokens) {
             return retry
+        }
+
+        let shouldBlockFallback = await MainActor.run {
+            MembershipStore.shared.blockingMessage != nil
+        }
+        if shouldBlockFallback {
+            return nil
         }
 
         if let fallbackOverride {
@@ -83,7 +90,8 @@ private final class TextConversationService {
         guard let response = await DeepSeekOrchestrator.shared.callDoubaoTextAPI(
             prompt: prompt,
             temperature: 0.3,
-            maxOutputTokens: maxOutputTokens
+            maxOutputTokens: maxOutputTokens,
+            feature: .textChat
         ) else {
             return nil
         }
@@ -146,8 +154,10 @@ private final class TextConversationService {
 // MARK: - Content View
 
 struct ContentView: View {
+    @Environment(\.openURL) private var openURL
     @StateObject private var voiceService = VoiceService()
     @StateObject private var authService = AuthService.shared
+    @StateObject private var membershipStore = MembershipStore.shared
     @State private var seedState: SeedState = .idle
     @State private var errorMessage: String?
     @State private var wakePulse = false
@@ -188,20 +198,21 @@ struct ContentView: View {
     @State private var isPhotoUnderstandingPending = false
     @State private var isAuthLoginPresented = false
     @State private var pendingPostLoginAction: PostLoginAction?
-    @State private var showMembershipComingSoon = false
+    @State private var isMembershipCenterPresented = false
+    @State private var showLogoutConfirmation = false
+    @State private var isOneTapInProgress = false
 
     private let particlePageCoordinateSpace = "particlePage"
     private let moreDrawerHeaderLeadingInset: CGFloat = 18
     private let moreDrawerHeaderTrailingInset: CGFloat = 20
     private let moreDrawerSubtitleFontSize: CGFloat = 15
+    private let contactURL = URL(string: "https://xhslink.com/m/hTLIgAmTLs")
     private let moreDrawerItems: [MoreDrawerItem] = [
         .init(icon: "crown", title: "会员计划", action: .membership),
         .init(icon: "brain.head.profile", title: "记忆回廊", action: .memoryCorridor),
         .init(icon: "safari", title: "AI 洞察", action: .insight),
         .init(icon: "photo.on.rectangle.angled", title: "相纸选择", action: .paperSelection),
-        .init(icon: "message", title: "联系我们", action: .contact),
-        .init(icon: "lock.shield", title: "隐私政策", action: .privacyPolicy),
-        .init(icon: "doc.text", title: "用户协议", action: .userAgreement)
+        .init(icon: "message", title: "联系我们", action: .contact)
     ]
 
     private var selectedPolaroidPaperStyle: PolaroidPaperStyle {
@@ -220,7 +231,7 @@ struct ContentView: View {
         if authService.isLoggedIn {
             return "欢迎回来，继续和 Gaya 聊聊"
         }
-        return "游客模式可体验，会员功能需登录"
+        return "登录后即可使用会员与积分能力"
     }
 
     var body: some View {
@@ -228,14 +239,16 @@ struct ContentView: View {
             let drawerWidth = moreDrawerWidth(screenWidth: proxy.size.width)
 
             ZStack(alignment: .topLeading) {
-                if !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented {
+                if !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented && !isMembershipCenterPresented {
                     MoreDrawerPanel(
                         title: moreDrawerTitle,
                         subtitle: moreDrawerSubtitle,
                         items: moreDrawerItems,
                         headerLeadingInset: moreDrawerHeaderLeadingInset,
                         headerTrailingInset: moreDrawerHeaderTrailingInset,
-                        onItemTap: handleMoreDrawerItemTap
+                        isLoggedIn: authService.isLoggedIn,
+                        onItemTap: handleMoreDrawerItemTap,
+                        onLogoutTap: { showLogoutConfirmation = true }
                     )
                     .frame(width: drawerWidth, height: proxy.size.height, alignment: .topLeading)
                     .ignoresSafeArea()
@@ -247,7 +260,7 @@ struct ContentView: View {
                 canvasContent
                     .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
                     .offset(
-                        x: isMoreDrawerPresented && !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented
+                        x: isMoreDrawerPresented && !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented && !isMembershipCenterPresented
                             ? drawerWidth
                             : 0
                     )
@@ -277,6 +290,23 @@ struct ContentView: View {
                 isMoreDrawerPresented = false
                 isMemoryCorridorPresented = false
                 isPaperSelectionPresented = false
+                isMembershipCenterPresented = false
+            }
+        }
+        .onChange(of: isMembershipCenterPresented) { _, isPresented in
+            if isPresented {
+                isMoreDrawerPresented = false
+                isMemoryCorridorPresented = false
+                isPaperSelectionPresented = false
+            }
+        }
+        .onChange(of: authService.isLoggedIn) { _, isLoggedIn in
+            Task {
+                if isLoggedIn {
+                    await membershipStore.refresh(forceLedger: true)
+                } else {
+                    membershipStore.reset()
+                }
             }
         }
         .onReceive(voiceService.$streamingResponseText) { text in
@@ -287,6 +317,9 @@ struct ContentView: View {
             handleIncomingVoiceTurn(turn)
         }
         .onReceive(voiceService.$connectionError.compactMap { $0 }) { message in
+            errorMessage = message
+        }
+        .onReceive(membershipStore.$blockingMessage.compactMap { $0 }) { message in
             errorMessage = message
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { notification in
@@ -331,10 +364,27 @@ struct ContentView: View {
                     async let conversationPayloadTask = PhotoEmotionCaptionService.shared.generateConversationPayload(from: image)
 
                     let conversationPayload = await conversationPayloadTask
+                    let generatedCaption = await generatedCaptionTask
 
                     await MainActor.run {
                         guard photoConversationRequestID == requestID else { return }
                         isPhotoUnderstandingPending = false
+                    }
+
+                    await MainActor.run {
+                        guard captionRequestID == requestID else { return }
+                        polaroidCaption = generatedCaption ?? ""
+                        isCaptionGenerating = false
+                    }
+
+                    guard let conversationPayload else {
+                        await MainActor.run {
+                            guard photoConversationRequestID == requestID else { return }
+                            handleOperationFailure(
+                                message: membershipStore.consumeBlockingMessage() ?? "照片理解暂不可用，请稍后再试。"
+                            )
+                        }
+                        return
                     }
 
                     await handlePhotoConversationInjection(
@@ -342,14 +392,6 @@ struct ContentView: View {
                         photoDescription: conversationPayload.description,
                         for: requestID
                     )
-
-                    let generatedCaption = await generatedCaptionTask
-
-                    await MainActor.run {
-                        guard captionRequestID == requestID else { return }
-                        polaroidCaption = generatedCaption
-                        isCaptionGenerating = false
-                    }
                 } else {
                     await MainActor.run {
                         isPhotoProcessing = false
@@ -364,19 +406,31 @@ struct ContentView: View {
             textResponseTask = nil
         }
         .fullScreenCover(isPresented: $isAuthLoginPresented, onDismiss: {
-            // Auth 登录页会触发键盘安全区变化，关闭后主动归零，避免主页面几何被残留键盘状态污染。
             keyboardBottomInset = 0
             dismissKeyboard()
         }) {
-            AuthLoginFlowView(authService: authService) {
-                isAuthLoginPresented = false
-                handlePostLoginActionIfNeeded()
-            }
+            AuthLoginFlowView(
+                authService: authService,
+                onLoginSuccess: {
+                    isAuthLoginPresented = false
+                    handlePostLoginActionIfNeeded()
+                }
+            )
         }
-        .alert("会员功能", isPresented: $showMembershipComingSoon) {
-            Button("知道了", role: .cancel) {}
-        } message: {
-            Text("会员支付链路将在登录接入后继续完善。")
+        .task {
+            membershipStore.prepareForAppLaunch()
+            guard authService.isLoggedIn else { return }
+            await membershipStore.refresh(forceLedger: true)
+        }
+        .sheet(isPresented: $showLogoutConfirmation) {
+            LogoutConfirmSheet(
+                onConfirm: { showLogoutConfirmation = false; performLogout() },
+                onCancel: { showLogoutConfirmation = false }
+            )
+            .presentationDetents([.height(180)])
+            .presentationDragIndicator(.hidden)
+            .presentationCornerRadius(16)
+            .interactiveDismissDisabled(false)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
     }
@@ -456,7 +510,7 @@ struct ContentView: View {
                         .zIndex(isPhotoModalPresented ? 25 : 12)
                 }
 
-                if !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented {
+                if !isPhotoModalPresented && !isMemoryCorridorPresented && !isPaperSelectionPresented && !isMembershipCenterPresented {
                     if seedState == .idle && errorMessage == nil && !isMoreDrawerPresented {
                         Color.clear
                             .contentShape(Rectangle())
@@ -505,6 +559,16 @@ struct ContentView: View {
                         menuButtonOverlay
                             .zIndex(30)
                     }
+                }
+
+                if isMembershipCenterPresented {
+                    MembershipCenterView {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isMembershipCenterPresented = false
+                        }
+                    }
+                    .zIndex(35)
+                    .transition(.move(edge: .trailing))
                 }
 
                 if isMemoryCorridorPresented {
@@ -706,7 +770,10 @@ struct ContentView: View {
     private var conversationModeOverlay: some View {
         HStack {
             Spacer()
-            ConversationModeSwitch(mode: $conversationMode)
+            ConversationModeSwitch(
+                mode: $conversationMode,
+                onLoginRequired: authService.isLoggedIn ? nil : { triggerOneTapLogin() }
+            )
                 .background(
                     GeometryReader { proxy in
                         let bottom = proxy.frame(in: .named(particlePageCoordinateSpace)).maxY
@@ -737,6 +804,7 @@ struct ContentView: View {
             onTopChanged: { top in
                 inputBarTopY = top
             },
+            onLoginRequired: authService.isLoggedIn ? nil : { triggerOneTapLogin() },
             onSend: {
                 sendCurrentInput()
             }
@@ -764,7 +832,32 @@ struct ContentView: View {
 
     // MARK: - Actions
 
+    private func requireLogin() -> Bool {
+        guard authService.isLoggedIn else {
+            if !isOneTapInProgress {
+                triggerOneTapLogin()
+            }
+            return false
+        }
+        return true
+    }
+
+    private func triggerOneTapLogin() {
+        guard !isOneTapInProgress else { return }
+        isOneTapInProgress = true
+        Task {
+            do {
+                try await authService.loginWithOneTap(agreementAccepted: true, nickname: "")
+                handlePostLoginActionIfNeeded()
+            } catch {
+                print("🔐 登录取消或失败: \(error.localizedDescription)")
+            }
+            isOneTapInProgress = false
+        }
+    }
+
     private func toggleMoreDrawer() {
+        guard requireLogin() else { return }
         guard !isMemoryCorridorPresented else { return }
         guard !isPaperSelectionPresented else { return }
         withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
@@ -785,10 +878,12 @@ struct ContentView: View {
             closeMoreDrawer()
             guard authService.isLoggedIn else {
                 pendingPostLoginAction = .membership
-                isAuthLoginPresented = true
+                triggerOneTapLogin()
                 return
             }
-            showMembershipComingSoon = true
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isMembershipCenterPresented = true
+            }
         case .memoryCorridor:
             closeMoreDrawer()
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -799,6 +894,10 @@ struct ContentView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 isPaperSelectionPresented = true
             }
+        case .contact:
+            closeMoreDrawer()
+            guard let contactURL else { return }
+            openURL(contactURL)
         default:
             closeMoreDrawer()
         }
@@ -810,8 +909,16 @@ struct ContentView: View {
 
         switch action {
         case .membership:
-            showMembershipComingSoon = true
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isMembershipCenterPresented = true
+            }
         }
+    }
+
+    private func performLogout() {
+        closeMoreDrawer()
+        isMembershipCenterPresented = false
+        authService.logout()
     }
 
     private func moreDrawerWidth(screenWidth: CGFloat) -> CGFloat {
@@ -836,6 +943,7 @@ struct ContentView: View {
     }
 
     private func sendCurrentInput() {
+        guard requireLogin() else { return }
         let userText = normalizeDialogueText(inputText)
         guard !userText.isEmpty else { return }
         guard !isResponding else { return }
@@ -865,6 +973,14 @@ struct ContentView: View {
                 userText: userText,
                 history: contextTurns
             )
+            guard let response else {
+                await MainActor.run {
+                    handleOperationFailure(
+                        message: membershipStore.consumeBlockingMessage() ?? "文本聊天暂不可用，请稍后再试。"
+                    )
+                }
+                return
+            }
             let normalized = normalizeDialogueText(response)
             await streamTextResponse(normalized)
             guard !Task.isCancelled else { return }
@@ -878,11 +994,35 @@ struct ContentView: View {
 
     private func sendVoiceModeMessage(_ userText: String) {
         textResponseTask?.cancel()
-        textResponseTask = nil
-        if voiceService.connectionError != nil {
-            voiceService.resetConnection()
+        textResponseTask = Task {
+            do {
+                let hold = try await prepareVoiceConversationHold(
+                    source: "typed_voice",
+                    text: userText
+                )
+                guard !Task.isCancelled else {
+                    await MembershipBillingCoordinator.shared.releaseHold(hold, reason: "operation_cancelled")
+                    return
+                }
+
+                await MainActor.run {
+                    if voiceService.connectionError != nil {
+                        voiceService.resetConnection()
+                    }
+                    voiceService.submitUserTextQuery(
+                        userText,
+                        billingHold: hold,
+                        estimatedUserSeconds: MembershipBillingCoordinator.estimatedSpeechSeconds(for: userText)
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    handleOperationFailure(
+                        message: membershipStore.consumeBlockingMessage() ?? error.localizedDescription
+                    )
+                }
+            }
         }
-        voiceService.submitUserTextQuery(userText)
     }
 
     private func handleIncomingVoiceTurn(_ turn: VoiceConversationTurn) {
@@ -1086,9 +1226,31 @@ struct ContentView: View {
 
         switch mode {
         case .voice:
-            await MainActor.run {
-                guard photoConversationRequestID == requestID else { return }
-                voiceService.submitPhotoUnderstandingAsUserInput(normalized)
+            do {
+                let hold = try await prepareVoiceConversationHold(
+                    source: "photo_injection",
+                    text: normalized
+                )
+                guard !Task.isCancelled else {
+                    await MembershipBillingCoordinator.shared.releaseHold(hold, reason: "operation_cancelled")
+                    return
+                }
+
+                await MainActor.run {
+                    guard photoConversationRequestID == requestID else { return }
+                    voiceService.submitPhotoUnderstandingAsUserInput(
+                        normalized,
+                        billingHold: hold,
+                        estimatedUserSeconds: MembershipBillingCoordinator.estimatedSpeechSeconds(for: normalized)
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    guard photoConversationRequestID == requestID else { return }
+                    handleOperationFailure(
+                        message: membershipStore.consumeBlockingMessage() ?? error.localizedDescription
+                    )
+                }
             }
         case .text:
             let fallback = TextConversationService.shared.makePhotoInjectionFallbackReply(
@@ -1099,6 +1261,15 @@ struct ContentView: View {
                 history: contextTurns,
                 fallbackOverride: fallback
             )
+            guard let response else {
+                await MainActor.run {
+                    guard photoConversationRequestID == requestID else { return }
+                    handleOperationFailure(
+                        message: membershipStore.consumeBlockingMessage() ?? "图片对话暂不可用，请稍后再试。"
+                    )
+                }
+                return
+            }
             let normalizedResponse = normalizeDialogueText(response)
             await streamTextResponse(normalizedResponse)
             guard !Task.isCancelled else { return }
@@ -1181,6 +1352,29 @@ struct ContentView: View {
         return compactPhotoDescriptionForContext(normalized)
     }
 
+    private func handleOperationFailure(message: String) {
+        errorMessage = message
+        currentRoundAIText = ""
+        isResponding = false
+        activeResponseMode = nil
+        textPseudoAudioLevel = 0
+        isPhotoUnderstandingPending = false
+        isCaptionGenerating = false
+    }
+
+    private func prepareVoiceConversationHold(
+        source: String,
+        text: String
+    ) async throws -> MembershipHoldReceipt {
+        try await MembershipBillingCoordinator.shared.createHold(
+            feature: .voiceConversation,
+            payload: [
+                "source": source,
+                "text_length": text.count
+            ]
+        )
+    }
+
     private func dismissKeyboard() {
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
@@ -1217,8 +1411,6 @@ private enum MoreDrawerAction: String, Hashable {
     case insight
     case paperSelection
     case contact
-    case privacyPolicy
-    case userAgreement
 }
 
 private struct MoreDrawerItem: Identifiable {
@@ -1234,7 +1426,9 @@ private struct MoreDrawerPanel: View {
     var items: [MoreDrawerItem]
     var headerLeadingInset: CGFloat
     var headerTrailingInset: CGFloat
+    var isLoggedIn: Bool
     var onItemTap: (MoreDrawerItem) -> Void
+    var onLogoutTap: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1266,6 +1460,23 @@ private struct MoreDrawerPanel: View {
                                 .font(.system(size: 17, weight: .semibold))
                         }
                         .foregroundColor(.white.opacity(0.92))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if isLoggedIn {
+                    Button {
+                        onLogoutTap()
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .font(.system(size: 20, weight: .semibold))
+                                .frame(width: 26, alignment: .center)
+
+                            Text("退出登录")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .foregroundColor(.red.opacity(0.8))
                     }
                     .buttonStyle(.plain)
                 }
@@ -1731,7 +1942,7 @@ private struct LiquidGlassMenuCircleIcon: View {
     }
 }
 
-private struct AuthUser: Codable {
+struct AuthUser: Codable {
     let uid: String
     let nickname: String
     let isNewUser: Bool?
@@ -1757,7 +1968,7 @@ private struct AuthSessionPayload: Codable {
     }
 }
 
-private struct AuthSession: Codable {
+struct AuthSession: Codable {
     let accessToken: String
     let refreshToken: String
     let tokenType: String
@@ -1780,7 +1991,7 @@ private struct AuthLoginResult: Decodable {
     let session: AuthSessionPayload
 }
 
-private struct SMSChallengeResult: Decodable {
+struct SMSChallengeResult: Decodable {
     let challengeID: String
     let resendAfterSeconds: Int
     let expireAfterSeconds: Int
@@ -1798,13 +2009,15 @@ private struct AuthAPIConfig {
     let smsSendPath: String
     let smsVerifyPath: String
 
+    private static let defaultBaseURL = Secrets.cloudBaseURL
+
     static func current() -> AuthAPIConfig {
         let info = Bundle.main.infoDictionary
-        let rawBaseURL = (info?["AUTH_API_BASE_URL"] as? String) ?? "https://YOUR_CLOUDBASE_HTTP_DOMAIN"
+        let rawBaseURL = (info?["AUTH_API_BASE_URL"] as? String) ?? Self.defaultBaseURL
         let oneTapPath = (info?["AUTH_ONETAP_LOGIN_PATH"] as? String) ?? "/auth/onetap/login"
         let smsSendPath = (info?["AUTH_SMS_SEND_PATH"] as? String) ?? "/auth/sms/send"
         let smsVerifyPath = (info?["AUTH_SMS_VERIFY_PATH"] as? String) ?? "/auth/sms/verify"
-        let url = URL(string: rawBaseURL) ?? URL(string: "https://YOUR_CLOUDBASE_HTTP_DOMAIN")!
+        let url = URL(string: rawBaseURL) ?? URL(string: Self.defaultBaseURL)!
         return AuthAPIConfig(
             baseURL: url,
             oneTapLoginPath: oneTapPath,
@@ -1858,36 +2071,72 @@ private enum OneTapProviderFactory {
 private struct AliyunPNVSOneTapProvider: MobileOneTapProvider {
     private let successCodes: Set<String> = ["6666", "600000"]
     private let cancelCodes: Set<String> = ["6667", "700000", "700001"]
+    private let intermediateCodes: Set<String> = ["700002", "700003", "700004", "700005", "700006", "700007", "700008", "700009", "700010", "600001", "6665"]
 
     func prepareMaskedPhone() async -> String? {
-        nil
+        #if canImport(ATAuthSDK)
+        let handler = TXCommonHandler.sharedInstance()
+        let envOK: Bool = await withCheckedContinuation { cont in
+            handler.checkEnvAvailable(with: .loginToken) { result in
+                let code = (result?["resultCode"] as? String) ?? ""
+                print("🔐 checkEnv: \(code) \(result?["msg"] ?? "")")
+                cont.resume(returning: code == "600000")
+            }
+        }
+        guard envOK else { return nil }
+
+        let preOK: Bool = await withCheckedContinuation { cont in
+            handler.accelerateLoginPage(withTimeout: 3.0) { result in
+                let code = (result["resultCode"] as? String) ?? ""
+                print("🔐 accelerate: \(code) \(result["msg"] ?? "")")
+                cont.resume(returning: code == "600000")
+            }
+        }
+        return preOK ? "本机号码一键登录" : nil
+        #else
+        return nil
+        #endif
     }
 
     func fetchLoginToken() async throws -> String {
         #if canImport(ATAuthSDK)
-        let controller = await MainActor.run { UIApplication.topMostViewController() }
-        guard let controller else {
-            throw AuthError.business("当前页面不可用，请稍后再试")
+        let (hostVC, hostWindow, model) = await MainActor.run { () -> (UIViewController, UIWindow, TXCustomModel) in
+            let vc = UIViewController()
+            vc.view.backgroundColor = .clear
+            let scene = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }.first!
+            let w = UIWindow(windowScene: scene)
+            w.rootViewController = vc
+            w.backgroundColor = .clear
+            w.windowLevel = .alert
+            w.makeKeyAndVisible()
+            return (vc, w, self.buildCustomModel())
         }
 
         let handler = TXCommonHandler.sharedInstance()
 
         return try await withCheckedThrowingContinuation { continuation in
             var resumed = false
-            handler.getLoginToken(with: controller, model: nil, timeout: 5.0) { payload in
+            handler.getLoginToken(withTimeout: 8.0, controller: hostVC, model: model) { payload in
                 guard !resumed else { return }
-                let result = parseResult(payload)
+                let result = self.parseResult(payload)
                 let code = result.code
+                print("🔐 getLoginToken callback: code=\(code) msg=\(result.message)")
 
-                if let token = result.token, !token.isEmpty, successCodes.contains(code) {
+                if self.intermediateCodes.contains(code) { return }
+
+                if let token = result.token, !token.isEmpty, self.successCodes.contains(code) {
                     resumed = true
                     handler.cancelLoginVC(animated: true, complete: nil)
+                    DispatchQueue.main.async { hostWindow.isHidden = true }
                     continuation.resume(returning: token)
                     return
                 }
 
                 resumed = true
-                if cancelCodes.contains(code) {
+                DispatchQueue.main.async { hostWindow.isHidden = true }
+
+                if self.cancelCodes.contains(code) {
                     continuation.resume(throwing: AuthError.business("你已取消本机号码登录"))
                     return
                 }
@@ -1904,6 +2153,186 @@ private struct AliyunPNVSOneTapProvider: MobileOneTapProvider {
     }
 
     #if canImport(ATAuthSDK)
+    private func buildCustomModel() -> TXCustomModel {
+        let m = TXCustomModel()
+        let bg = UIColor(red: 0.08, green: 0.09, blue: 0.12, alpha: 1)
+        let accent = UIColor(red: 0.38, green: 0.78, blue: 0.62, alpha: 1)
+        let hPad: CGFloat = 32
+
+        // MARK: 状态栏 & 背景
+        m.preferredStatusBarStyle = .lightContent
+        m.backgroundColor = bg
+
+        // MARK: 导航栏
+        m.navColor = bg
+        m.navTitle = NSAttributedString(string: "")
+        if let xImg = UIImage(systemName: "xmark")?
+            .withConfiguration(UIImage.SymbolConfiguration(pointSize: 18, weight: .medium))
+            .withTintColor(.white, renderingMode: .alwaysOriginal) {
+            m.navBackImage = xImg
+        }
+
+        // MARK: Logo（圆角处理，同 App Icon）
+        let logoSize: CGFloat = 80
+        let logoRadius: CGFloat = 18
+        if let raw = UIImage(named: "AppLogo") {
+            m.logoImage = Self.roundedCornerImage(raw, size: logoSize, radius: logoRadius)
+        }
+        m.logoFrameBlock = { screen, sv, _ in
+            let y = screen.height * 0.18
+            return CGRect(x: (sv.width - logoSize) / 2, y: y, width: logoSize, height: logoSize)
+        }
+
+        // MARK: Slogan — "语尔"
+        m.sloganText = NSAttributedString(
+            string: "语尔",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 22, weight: .bold),
+                .foregroundColor: UIColor.white
+            ])
+        m.sloganFrameBlock = { screen, sv, _ in
+            let y = screen.height * 0.18 + logoSize + 10
+            return CGRect(x: 0, y: y, width: sv.width, height: 30)
+        }
+
+        // MARK: "本机号码登录" + 手机号 — 语尔下方 10pt 开始
+        m.numberColor = .white
+        m.numberFont = UIFont.monospacedDigitSystemFont(ofSize: 26, weight: .bold)
+        m.numberFrameBlock = { screen, sv, fr in
+            let y = screen.height * 0.18 + logoSize + 10 + 30 + 10 + 22
+            return CGRect(x: (sv.width - fr.width) / 2, y: y, width: fr.width, height: fr.height)
+        }
+
+        m.customViewBlock = { superView in
+            let label = UILabel()
+            label.text = "本机号码登录"
+            label.font = UIFont.systemFont(ofSize: 14, weight: .regular)
+            label.textColor = UIColor.white.withAlphaComponent(0.5)
+            label.textAlignment = .center
+            label.tag = 8001
+            superView.addSubview(label)
+        }
+        m.customViewLayoutBlock = { _, _, _, _, _, _, numberFrame, _, _, _ in
+            guard let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene }).first,
+                  let superView = scene.windows.first(where: { $0.windowLevel == .alert })?.rootViewController?.presentedViewController?.view else { return }
+            if let label = superView.viewWithTag(8001) as? UILabel {
+                label.frame = CGRect(x: 0, y: numberFrame.minY - 24, width: numberFrame.width + 100, height: 20)
+                label.center.x = numberFrame.midX
+            }
+        }
+
+        // MARK: 登录按钮 — 默认高亮白色
+        let btnOffset: CGFloat = 30
+        m.loginBtnText = NSAttributedString(
+            string: "一键登录",
+            attributes: [
+                .font: UIFont.systemFont(ofSize: 18, weight: .semibold),
+                .foregroundColor: UIColor.black
+            ])
+        let btnNormal = Self.roundedImage(color: .white, size: CGSize(width: 300, height: 50), radius: 25)
+        m.loginBtnBgImgs = [btnNormal, btnNormal, btnNormal]
+        m.loginBtnFrameBlock = { _, sv, _ in
+            return CGRect(x: hPad, y: sv.height * 0.75 - btnOffset, width: sv.width - hPad * 2, height: 50)
+        }
+
+        // MARK: 切换按钮（隐藏）
+        m.changeBtnIsHidden = true
+
+        // MARK: 协议区
+        m.checkBoxIsChecked = false
+        m.checkBoxIsHidden = false
+        m.checkBoxWH = 14
+        m.privacyPreText = "已阅读并同意"
+        m.privacyOne = ["《用户服务协议》", "https://example.com/terms"]
+        m.privacyTwo = ["《用户隐私政策》", "https://example.com/privacy"]
+        m.privacyColors = [UIColor.white.withAlphaComponent(0.45), accent]
+        m.privacyFont = UIFont.systemFont(ofSize: 11)
+        m.privacyAlignment = .center
+        m.privacyFrameBlock = { _, sv, _ in
+            return CGRect(x: hPad, y: sv.height * 0.75 - btnOffset + 60, width: sv.width - hPad * 2, height: 44)
+        }
+
+        // MARK: 二次协议弹窗 — 从底部弹出，紧凑布局
+        m.privacyAlertIsNeedShow = true
+        m.privacyAlertIsNeedAutoLogin = true
+        m.privacyAlertCornerRadiusArray = [16, 16, 0, 0]
+        m.privacyAlertBackgroundColor = bg
+        m.privacyAlertAlpha = 1.0
+        m.privacyAlertMaskColor = .black
+        m.privacyAlertMaskAlpha = 0.6
+
+        m.privacyAlertTitleContent = "用户协议与隐私保护"
+        m.privacyAlertTitleFont = UIFont.systemFont(ofSize: 16, weight: .bold)
+        m.privacyAlertTitleColor = .white
+        m.privacyAlertTitleBackgroundColor = bg
+        m.privacyAlertTitleAlignment = .center
+
+        m.privacyAlertPreText = "请先阅读并同意以下协议：\n"
+        m.privacyAlertContentFont = UIFont.systemFont(ofSize: 14)
+        m.privacyAlertContentBackgroundColor = bg
+        m.privacyAlertContentColors = [UIColor.white.withAlphaComponent(0.6), accent]
+        m.privacyAlertContentAlignment = .left
+        m.privacyAlertLineSpaceDp = 4
+
+        m.privacyAlertBtnContent = "同意并登录"
+        m.privacyAlertButtonFont = UIFont.systemFont(ofSize: 17, weight: .semibold)
+        m.privacyAlertBtnCornerRadius = 25
+        m.privacyAlertButtonTextColors = [UIColor.black, UIColor.black]
+        let alertBtn = Self.roundedImage(color: .white, size: CGSize(width: 300, height: 50), radius: 25)
+        m.privacyAlertBtnBackgroundImages = [alertBtn, alertBtn]
+
+        m.privacyAlertCloseButtonIsNeedShow = true
+        m.tapPrivacyAlertMaskCloseAlert = true
+
+        m.privacyAlertTitleFrameBlock = { _, sv, fr in
+            return CGRect(x: fr.minX, y: 20, width: fr.width, height: fr.height)
+        }
+
+        m.privacyAlertPrivacyContentFrameBlock = { _, sv, fr in
+            return CGRect(x: fr.minX, y: 20 + 25 + 20, width: fr.width, height: fr.height)
+        }
+
+        let safeBottom = Self.safeAreaBottom()
+        let contentTop: CGFloat = 20 + 25 + 20 + 80
+        let alertH: CGFloat = contentTop + 30 + 50 + 16 + safeBottom
+        m.privacyAlertFrameBlock = { screen, _, _ in
+            return CGRect(x: 0, y: screen.height - alertH, width: screen.width, height: alertH)
+        }
+        m.privacyAlertButtonFrameBlock = { _, sv, fr in
+            return CGRect(x: hPad, y: contentTop + 30, width: sv.width - hPad * 2, height: 50)
+        }
+
+        return m
+    }
+
+    private static func safeAreaBottom() -> CGFloat {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }).first,
+              let window = scene.windows.first else { return 34 }
+        return max(window.safeAreaInsets.bottom, 20)
+    }
+
+    private static func roundedCornerImage(_ source: UIImage, size: CGFloat, radius: CGFloat) -> UIImage {
+        let rect = CGRect(origin: .zero, size: CGSize(width: size, height: size))
+        UIGraphicsBeginImageContextWithOptions(rect.size, false, 0)
+        UIBezierPath(roundedRect: rect, cornerRadius: radius).addClip()
+        source.draw(in: rect)
+        let result = UIGraphicsGetImageFromCurrentImageContext()!
+        UIGraphicsEndImageContext()
+        return result
+    }
+
+    private static func roundedImage(color: UIColor, size: CGSize, radius: CGFloat) -> UIImage {
+        UIGraphicsBeginImageContextWithOptions(size, false, 0)
+        UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: radius).addClip()
+        color.setFill()
+        UIRectFill(CGRect(origin: .zero, size: size))
+        let img = UIGraphicsGetImageFromCurrentImageContext()!
+        UIGraphicsEndImageContext()
+        return img
+    }
+
     private func parseResult(_ payload: Any?) -> (code: String, message: String, token: String?) {
         guard let dictionary = payload as? [AnyHashable: Any] else {
             return ("", "一键登录返回异常", nil)
@@ -1960,7 +2389,7 @@ private extension UIApplication {
 }
 
 @MainActor
-private final class AuthService: ObservableObject {
+final class AuthService: ObservableObject {
     static let shared = AuthService()
 
     @Published private(set) var user: AuthUser?
@@ -1975,18 +2404,27 @@ private final class AuthService: ObservableObject {
         user?.nickname ?? ""
     }
 
+    var authorizationHeaderValue: String? {
+        guard let session else { return nil }
+        return "\(session.tokenType) \(session.accessToken)"
+    }
+
+    var deviceID: String {
+        self.deviceIDStorage
+    }
+
     private let config = AuthAPIConfig.current()
     private let oneTapProvider: MobileOneTapProvider
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
     private let persistedStateKey = "gaya.auth.persisted.state"
-    private var deviceID: String
+    private var deviceIDStorage: String
 
     private init(oneTapProvider: MobileOneTapProvider = OneTapProviderFactory.make()) {
         self.oneTapProvider = oneTapProvider
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
-        self.deviceID = Self.resolveDeviceID()
+        self.deviceIDStorage = Self.resolveDeviceID()
         self.decoder.dateDecodingStrategy = .iso8601
         self.encoder.dateEncodingStrategy = .iso8601
 
@@ -2082,7 +2520,7 @@ private final class AuthService: ObservableObject {
 
     private func switchToNamespace(uid: String?) {
         let normalizedUID = uid?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let namespace = normalizedUID.isEmpty ? "guest" : normalizedUID
+        let namespace = normalizedUID.isEmpty ? deviceIDStorage : normalizedUID
         MemoryStore.shared.switchNamespace(namespace)
         Task { @MainActor in
             await MemoryCorridorStore.shared.switchNamespace(namespace)
@@ -2132,7 +2570,7 @@ private final class AuthService: ObservableObject {
         request.httpMethod = "POST"
         request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(deviceID, forHTTPHeaderField: "x-device-id")
+        request.setValue(deviceIDStorage, forHTTPHeaderField: "x-device-id")
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -2195,6 +2633,44 @@ private enum KeychainStore {
     }
 }
 
+private struct LogoutConfirmSheet: View {
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("确定要退出登录吗？")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.gray)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
+
+            Divider().overlay(Color.white.opacity(0.08))
+
+            Button(action: onConfirm) {
+                Text("退出登录")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+            }
+
+            Divider().overlay(Color.white.opacity(0.08))
+
+            Button(action: onCancel) {
+                Text("取消")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .background(Color(red: 0.12, green: 0.13, blue: 0.16))
+        .ignoresSafeArea(.container, edges: .bottom)
+    }
+}
+
 private struct AuthLoginFlowView: View {
     @ObservedObject var authService: AuthService
     let onLoginSuccess: () -> Void
@@ -2209,6 +2685,7 @@ private struct AuthLoginFlowView: View {
     @State private var isProcessing = false
     @State private var errorText: String?
     @State private var countdownTask: Task<Void, Never>?
+    @State private var showAgreementSheet = false
 
     private enum LoginMode {
         case oneTap
@@ -2299,71 +2776,62 @@ private struct AuthLoginFlowView: View {
 
     private var oneTapContent: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 48)
+            Spacer(minLength: 36)
 
-            VStack(spacing: 22) {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(Color(red: 0.96, green: 0.86, blue: 0.52), lineWidth: 4)
-                    .frame(width: 96, height: 96)
-                    .overlay(
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 34, weight: .semibold))
-                            .foregroundColor(Color(red: 0.96, green: 0.86, blue: 0.52))
-                    )
+            VStack(spacing: 14) {
+                Image("AppLogo")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 88, height: 88)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                Text("星野")
-                    .font(.system(size: 56, weight: .bold))
-                    .foregroundColor(Color(red: 0.96, green: 0.86, blue: 0.52))
+                Text("语尔")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(Color(red: 0.38, green: 0.78, blue: 0.62))
             }
 
-            Spacer(minLength: 120)
+            Spacer(minLength: 60)
 
             Text("本机号码登录")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white.opacity(0.62))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white.opacity(0.55))
 
             Text(authService.oneTapMaskedPhone)
-                .font(.system(size: 46, weight: .bold))
+                .font(.system(size: 34, weight: .bold))
                 .foregroundColor(.white.opacity(0.92))
                 .minimumScaleFactor(0.65)
                 .lineLimit(1)
-                .padding(.top, 14)
+                .padding(.top, 10)
 
             Button {
-                submitOneTapLogin()
+                handleOneTapTap()
             } label: {
                 Text("一键登录")
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundColor(Color(red: 0.05, green: 0.07, blue: 0.12))
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.black)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 82)
+                    .frame(height: 54)
                     .background(
-                        RoundedRectangle(cornerRadius: 41, style: .continuous)
-                            .fill(Color(red: 0.94, green: 0.84, blue: 0.52))
+                        RoundedRectangle(cornerRadius: 27, style: .continuous)
+                            .fill(.white)
                     )
             }
             .buttonStyle(.plain)
-            .padding(.top, 36)
+            .padding(.top, 32)
 
             Button {
                 mode = .sms
                 errorText = nil
             } label: {
                 Text("其他手机号登录")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white.opacity(0.75))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 82)
-                    .background(
-                        RoundedRectangle(cornerRadius: 41, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
-                    )
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.55))
+                    .padding(.top, 20)
             }
             .buttonStyle(.plain)
-            .padding(.top, 20)
 
             agreementRow
-                .padding(.top, 26)
+                .padding(.top, 28)
 
             if let errorText {
                 Text(errorText)
@@ -2372,13 +2840,18 @@ private struct AuthLoginFlowView: View {
                     .padding(.top, 14)
             }
         }
+        .sheet(isPresented: $showAgreementSheet) {
+            agreementConfirmSheet
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
     }
 
     private var smsContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             Spacer(minLength: 36)
 
-            Text("欢迎登录 星野")
+            Text("欢迎登录 语尔")
                 .font(.system(size: 44, weight: .bold))
                 .foregroundColor(.white.opacity(0.94))
 
@@ -2568,31 +3041,82 @@ private struct AuthLoginFlowView: View {
         }
     }
 
-    private func submitOneTapLogin() {
-        guard agreementAccepted else {
-            errorText = "请先阅读并同意协议"
-            return
+    private func handleOneTapTap() {
+        if agreementAccepted {
+            submitOneTapLogin()
+        } else {
+            showAgreementSheet = true
         }
+    }
 
-        errorText = nil
-        isProcessing = true
+    private func agreeAndLogin() {
+        agreementAccepted = true
+        showAgreementSheet = false
+        submitOneTapLogin()
+    }
 
-        Task {
-            defer {
-                Task { @MainActor in
-                    isProcessing = false
+    private var agreementConfirmSheet: some View {
+        VStack(spacing: 0) {
+            Text("用户协议与隐私保护")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.white.opacity(0.95))
+                .padding(.top, 24)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("请先阅读并同意以下协议：")
+                    .font(.system(size: 15))
+                    .foregroundColor(.white.opacity(0.6))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    agreementLink("《用户服务协议》")
+                    agreementLink("《用户隐私政策》")
+                    agreementLink("《中国移动认证服务条款》")
                 }
             }
+            .padding(.top, 20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
 
+            Spacer()
+
+            Button {
+                agreeAndLogin()
+            } label: {
+                Text("同意并登录")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                    .background(
+                        RoundedRectangle(cornerRadius: 25, style: .continuous)
+                            .fill(.white)
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.08, green: 0.09, blue: 0.12).ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private func agreementLink(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(Color(red: 0.38, green: 0.78, blue: 0.62))
+    }
+
+    private func submitOneTapLogin() {
+        errorText = nil
+        isProcessing = true
+        Task {
+            defer { Task { @MainActor in isProcessing = false } }
             do {
                 try await authService.loginWithOneTap(agreementAccepted: agreementAccepted)
-                await MainActor.run {
-                    onLoginSuccess()
-                }
+                await MainActor.run { onLoginSuccess() }
             } catch {
-                await MainActor.run {
-                    errorText = error.localizedDescription
-                }
+                await MainActor.run { errorText = error.localizedDescription }
             }
         }
     }

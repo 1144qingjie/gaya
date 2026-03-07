@@ -21,6 +21,12 @@ struct VoiceConversationTurn: Identifiable {
     let timestamp: Date
 }
 
+private struct QueuedVoiceTextQuery {
+    let text: String
+    let billingHold: MembershipHoldReceipt?
+    let estimatedUserSeconds: Double
+}
+
 // MARK: - 火山引擎协议常量
 private struct VolcProtocol {
     // 协议版本和头大小
@@ -217,16 +223,17 @@ class VoiceService: NSObject, ObservableObject {
     private var ignoreIncomingAudio = false                   // 是否忽略自动 LLM 的音频输出
     private var contextQueryId: Int = 0                       // 上下文构建版本号（避免并发污染）
     private var currentContextQuery: String?                  // 当前上下文对应的用户查询
-    private var pendingInjectedQueries: [String] = []         // 等待注入的文本查询（图片等）
+    private var pendingInjectedQueries: [QueuedVoiceTextQuery] = []  // 等待注入的文本查询（图片等）
     private var isInjectedQueryInFlight = false               // 当前是否有注入查询在执行
-    private var activeInjectedQuery: String?                  // 当前执行中的注入查询文本
-    private var pendingUserTextQueries: [String] = []         // 等待发送的用户文本查询
+    private var activeInjectedQuery: QueuedVoiceTextQuery?    // 当前执行中的注入查询文本
+    private var pendingUserTextQueries: [QueuedVoiceTextQuery] = []  // 等待发送的用户文本查询
     private var isUserTextQueryInFlight = false               // 当前是否有用户文本查询在执行
-    private var activeUserTextQuery: String?                  // 当前执行中的用户文本查询
+    private var activeUserTextQuery: QueuedVoiceTextQuery?    // 当前执行中的用户文本查询
     private var currentTurnSource: TurnSource = .audio        // 当前轮次来源
     private var manualPipelineStartTime: Date?                // 手动联网链路起点（VAD 结束）
     private var lastVADEndTime: Date?                         // 最近一次 VAD 结束时间
     private var shouldMeasureVADToChatTextQuery = false       // 是否记录 VAD->ChatTextQuery 耗时
+    private var currentTurnResponseAudioSeconds: Double = 0   // 当前轮次 AI 音频总时长
     
     // MARK: - Initialization
     override init() {
@@ -291,6 +298,9 @@ class VoiceService: NSObject, ObservableObject {
     func disconnect() {
         // 停止心跳
         stopKeepAliveTimer()
+        releaseActiveVoiceBillingIfNeeded(reason: "connection_closed")
+        releaseBilling(for: pendingInjectedQueries, reason: "connection_closed")
+        releaseBilling(for: pendingUserTextQueries, reason: "connection_closed")
         
         if isConnected {
             sendFinishConnection()
@@ -333,6 +343,7 @@ class VoiceService: NSObject, ObservableObject {
         genderDetectionStartTime = nil
         shouldSendSilenceAfterSessionStart = false
         resetBufferedAudio()
+        currentTurnResponseAudioSeconds = 0
         
         // 清理播放状态
         cleanupPlayback()
@@ -550,7 +561,11 @@ class VoiceService: NSObject, ObservableObject {
     }
 
     /// 提交用户文本查询（语音模式：输入文本，输出语音+文本）
-    func submitUserTextQuery(_ text: String) {
+    func submitUserTextQuery(
+        _ text: String,
+        billingHold: MembershipHoldReceipt? = nil,
+        estimatedUserSeconds: Double? = nil
+    ) {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
 
@@ -558,31 +573,50 @@ class VoiceService: NSObject, ObservableObject {
         DispatchQueue.main.async {
             self.streamingResponseText = ""
         }
-        pendingUserTextQueries.append(normalized)
+        pendingUserTextQueries.append(
+            QueuedVoiceTextQuery(
+                text: normalized,
+                billingHold: billingHold,
+                estimatedUserSeconds: estimatedUserSeconds ?? MembershipBillingCoordinator.estimatedSpeechSeconds(for: normalized)
+            )
+        )
         ensureSessionForUserTextQueryIfNeeded()
     }
 
     /// 将图片理解内容作为“用户输入”注入当前对话链路。
     /// 会复用现有 ChatTextQuery + 自动 TTS 能力。
-    func submitPhotoUnderstandingAsUserInput(_ text: String) {
+    func submitPhotoUnderstandingAsUserInput(
+        _ text: String,
+        billingHold: MembershipHoldReceipt? = nil,
+        estimatedUserSeconds: Double? = nil
+    ) {
         let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalized.isEmpty else { return }
 
         print("🖼️ Queueing photo understanding query (\(normalized.count) chars)")
-        pendingInjectedQueries.append(normalized)
+        pendingInjectedQueries.append(
+            QueuedVoiceTextQuery(
+                text: normalized,
+                billingHold: billingHold,
+                estimatedUserSeconds: estimatedUserSeconds ?? MembershipBillingCoordinator.estimatedSpeechSeconds(for: normalized)
+            )
+        )
         ensureSessionForInjectedQueryIfNeeded()
     }
 
     /// 清空尚未发送的注入文本。
     /// - Parameter cancelInFlight: 是否同时终止正在播报中的注入查询
     func clearPendingInjectedQueries(cancelInFlight: Bool = false) {
+        releaseBilling(for: pendingInjectedQueries, reason: "operation_cancelled")
         pendingInjectedQueries.removeAll()
         if cancelInFlight, isInjectedQueryInFlight {
+            releaseActiveVoiceBillingIfNeeded(reason: "operation_cancelled")
             isInjectedQueryInFlight = false
             activeInjectedQuery = nil
             currentUserText = nil
             currentAIText = nil
             currentTurnSource = .audio
+            currentTurnResponseAudioSeconds = 0
 
             playerNode?.stop()
             bufferCountQueue.sync {
@@ -1347,15 +1381,18 @@ class VoiceService: NSObject, ObservableObject {
             ttsCompleted = false
             if isInjectedQueryInFlight {
                 print("⏭️ Injected query interrupted by user speech")
+                releaseActiveVoiceBillingIfNeeded(reason: "interrupted")
                 isInjectedQueryInFlight = false
                 activeInjectedQuery = nil
             }
             if isUserTextQueryInFlight {
                 print("⏭️ User text query interrupted by user speech")
+                releaseActiveVoiceBillingIfNeeded(reason: "interrupted")
                 isUserTextQueryInFlight = false
                 activeUserTextQuery = nil
             }
             currentTurnSource = .audio
+            currentTurnResponseAudioSeconds = 0
             
         case 459:  // 用户说话结束（VAD 检测到静音）
             print("🗣️ User finished speaking (VAD end detected)")
@@ -1419,6 +1456,7 @@ class VoiceService: NSObject, ObservableObject {
             isSendingChatTTS = false
             ttsCompleted = true
             isWaitingForTTS = false
+            settleActiveVoiceBillingIfNeeded()
             // 保存本轮对话到历史记录
             saveConversationTurn()
             if isUserTextQueryInFlight {
@@ -1429,6 +1467,7 @@ class VoiceService: NSObject, ObservableObject {
                 isInjectedQueryInFlight = false
                 activeInjectedQuery = nil
             }
+            currentTurnResponseAudioSeconds = 0
             trySendNextUserTextQueryIfNeeded()
             trySendNextInjectedQueryIfNeeded()
             
@@ -2020,6 +2059,8 @@ class VoiceService: NSObject, ObservableObject {
             print("⚠️ Audio data too small: \(data.count) bytes")
             return 
         }
+
+        currentTurnResponseAudioSeconds += Double(frameCount) / Double(VolcEngineConfig.outputSampleRate)
         
         guard let buffer = AVAudioPCMBuffer(pcmFormat: playbackFormat, frameCapacity: AVAudioFrameCount(frameCount)) else {
             print("❌ Failed to create audio buffer")
@@ -2752,14 +2793,15 @@ class VoiceService: NSObject, ObservableObject {
         hasReceivedAudioResponse = false
         isWaitingForTTS = true
         ttsCompleted = false
-        currentUserText = query
+        currentUserText = query.text
         currentAIText = nil
+        currentTurnResponseAudioSeconds = 0
         DispatchQueue.main.async {
             self.streamingResponseText = ""
         }
 
         print("💬 Sending user ChatTextQuery")
-        sendChatTextQuery(query)
+        sendChatTextQuery(query.text)
     }
 
     /// 连接中断或请求失败时，将执行中的用户文本查询放回队列头部。
@@ -2770,6 +2812,7 @@ class VoiceService: NSObject, ObservableObject {
         activeUserTextQuery = nil
         currentUserText = nil
         currentAIText = nil
+        currentTurnResponseAudioSeconds = 0
         if currentTurnSource == .userText {
             currentTurnSource = .audio
         }
@@ -2823,14 +2866,15 @@ class VoiceService: NSObject, ObservableObject {
         hasReceivedAudioResponse = false
         isWaitingForTTS = true
         ttsCompleted = false
-        currentUserText = query
+        currentUserText = query.text
         currentAIText = nil
+        currentTurnResponseAudioSeconds = 0
         DispatchQueue.main.async {
             self.streamingResponseText = ""
         }
 
         print("🖼️ Sending injected ChatTextQuery")
-        sendChatTextQuery(query)
+        sendChatTextQuery(query.text)
     }
 
     /// 连接中断或请求失败时，将执行中的注入查询放回队列头部。
@@ -2841,8 +2885,70 @@ class VoiceService: NSObject, ObservableObject {
         activeInjectedQuery = nil
         currentUserText = nil
         currentAIText = nil
+        currentTurnResponseAudioSeconds = 0
         if currentTurnSource == .injected {
             currentTurnSource = .audio
+        }
+    }
+
+    private func currentActiveVoiceQuery() -> QueuedVoiceTextQuery? {
+        if let activeUserTextQuery {
+            return activeUserTextQuery
+        }
+        if let activeInjectedQuery {
+            return activeInjectedQuery
+        }
+        return nil
+    }
+
+    private func estimateBillableVoiceSeconds(for query: QueuedVoiceTextQuery, aiText: String) -> Double {
+        let estimatedAISpeechSeconds = MembershipBillingCoordinator.estimatedSpeechSeconds(for: aiText)
+        let settledAISpeechSeconds = max(currentTurnResponseAudioSeconds, estimatedAISpeechSeconds)
+        return max(1, query.estimatedUserSeconds + settledAISpeechSeconds)
+    }
+
+    private func settleActiveVoiceBillingIfNeeded() {
+        guard let query = currentActiveVoiceQuery(),
+              let hold = query.billingHold else {
+            return
+        }
+
+        let aiText = currentAIText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if aiText.isEmpty {
+            releaseActiveVoiceBillingIfNeeded(reason: "empty_response")
+            return
+        }
+
+        let billableSeconds = estimateBillableVoiceSeconds(for: query, aiText: aiText)
+        Task {
+            await MembershipBillingCoordinator.shared.commitHold(
+                hold,
+                usage: MembershipOperationUsage(
+                    totalTokens: nil,
+                    billableSeconds: billableSeconds
+                ),
+                payload: [
+                    "source": currentTurnSource == .injected ? "photo_injection" : "voice_query",
+                    "ai_text_length": aiText.count
+                ]
+            )
+        }
+    }
+
+    private func releaseActiveVoiceBillingIfNeeded(reason: String) {
+        guard let hold = currentActiveVoiceQuery()?.billingHold else { return }
+        Task {
+            await MembershipBillingCoordinator.shared.releaseHold(hold, reason: reason)
+        }
+    }
+
+    private func releaseBilling(for queries: [QueuedVoiceTextQuery], reason: String) {
+        let holds = queries.compactMap(\.billingHold)
+        guard !holds.isEmpty else { return }
+        Task {
+            for hold in holds {
+                await MembershipBillingCoordinator.shared.releaseHold(hold, reason: reason)
+            }
         }
     }
     
@@ -2852,8 +2958,16 @@ class VoiceService: NSObject, ObservableObject {
             print("📝 No user text to save")
             return
         }
-        
-        let aiText = currentAIText ?? ""
+
+        let aiText = currentAIText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !aiText.isEmpty else {
+            print("📝 Empty AI text, skipping conversation persistence")
+            currentUserText = nil
+            currentAIText = nil
+            currentTurnSource = .audio
+            currentTurnResponseAudioSeconds = 0
+            return
+        }
         let isInjectedTurn = currentTurnSource == .injected
         
         if isInjectedTurn {

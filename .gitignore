@@ -24,6 +24,7 @@ Package.resolved
 # CocoaPods
 Pods/
 *.podspec
+!Frameworks/ATAuthSDK.podspec
 
 # Carthage
 Carthage/Build/
@@ -36,6 +37,10 @@ fastlane/test_output
 
 # Local deployment secrets
 backend/cloudbase/.env.deploy
+backend/cloudbase/.tmp.profile*/
+
+# iOS app secrets (copy Secrets.swift.example → Secrets.swift and fill in real values)
+gaya/Secrets.swift
 
 # Node.js
 node_modules/

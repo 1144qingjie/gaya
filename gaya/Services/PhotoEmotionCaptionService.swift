@@ -18,7 +18,7 @@ final class PhotoEmotionCaptionService {
 
     private init() {}
 
-    func generateCaption(from image: UIImage) async -> String {
+    func generateCaption(from image: UIImage) async -> String? {
         guard let imageDataURL = buildImageDataURL(from: image) else {
             return fallbackCaption()
         }
@@ -39,8 +39,12 @@ final class PhotoEmotionCaptionService {
         guard let response = await DeepSeekOrchestrator.shared.callDoubaoAPI(
             messages: [message],
             temperature: 0.2,
-            maxOutputTokens: captionMaxOutputTokens
+            maxOutputTokens: captionMaxOutputTokens,
+            feature: .photoCaption
         ) else {
+            if await shouldBlockFallbackForMembershipFailure() {
+                return nil
+            }
             return fallbackCaption()
         }
 
@@ -50,15 +54,15 @@ final class PhotoEmotionCaptionService {
 
     /// 生成可注入语音对话链路的文本。
     /// 该文本会作为“用户输入”送入当前会话，触发 AI 先进行照片解读并语音播报。
-    func generateConversationInput(from image: UIImage) async -> String {
+    func generateConversationInput(from image: UIImage) async -> String? {
         let payload = await generateConversationPayload(from: image)
-        return payload.injectedUserInput
+        return payload?.injectedUserInput
     }
 
     /// 生成图片理解结果：
     /// - description: 仅图片描述文本（用于 UI 气泡展示）
     /// - injectedUserInput: 注入语音对话链路的完整用户输入
-    func generateConversationPayload(from image: UIImage) async -> PhotoConversationPayload {
+    func generateConversationPayload(from image: UIImage) async -> PhotoConversationPayload? {
         guard let imageDataURL = buildImageDataURL(from: image) else {
             return fallbackConversationPayload()
         }
@@ -82,8 +86,12 @@ final class PhotoEmotionCaptionService {
         guard let response = await DeepSeekOrchestrator.shared.callDoubaoAPI(
             messages: [message],
             temperature: 0.35,
-            maxOutputTokens: conversationMaxOutputTokens
+            maxOutputTokens: conversationMaxOutputTokens,
+            feature: .photoConversation
         ) else {
+            if await shouldBlockFallbackForMembershipFailure() {
+                return nil
+            }
             return fallbackConversationPayload()
         }
 
@@ -182,5 +190,11 @@ final class PhotoEmotionCaptionService {
             description: description,
             injectedUserInput: composeConversationInput(with: description)
         )
+    }
+
+    private func shouldBlockFallbackForMembershipFailure() async -> Bool {
+        await MainActor.run {
+            MembershipStore.shared.blockingMessage != nil
+        }
     }
 }

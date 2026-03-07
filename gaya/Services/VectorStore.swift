@@ -21,7 +21,7 @@ class VectorStore {
     private let dbQueue = DispatchQueue(label: "com.gaya.vectorstore.db")
     
     // MARK: - 配置
-    private var currentNamespace: String = "guest"
+    private var currentNamespace: String = "local"
     private let tableName = "memory_vectors"
     
     // MARK: - 嵌入服务
@@ -64,7 +64,7 @@ class VectorStore {
             with: "_",
             options: .regularExpression
         )
-        return filtered.isEmpty ? "guest" : filtered
+        return filtered.isEmpty ? "local" : filtered
     }
 
     private func dbFileName(for namespace: String) -> String {
